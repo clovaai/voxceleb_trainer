@@ -11,6 +11,16 @@ pip install -r requirements.txt
 python ./trainSpeakerNet.py --model ResNetSE34 --encoder SAP --trainfunc amsoftmax --optimizer adam --save_path data/exp1 --batch_size 200 --max_frames 200 --scale 30 --margin 0.3 --train_list /home/joon/train_list.txt --test_list /home/joon/test_list.txt --train_path /home/joon/voxceleb2 --test_path /home/joon/voxceleb1
 ```
 
+#### Pretrained model
+
+A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model).
+
+You can check that the following script returns: `EER 2.2587`.
+
+```
+python ./trainSpeakerNet.py --eval --model=ResNetSE34 --trainfunc angleproto --optimizer adam --save_path=data/test --max_frames=300 --test_list /home/joon/test_list.txt --test_path /home/joon/voxceleb1 --initial_model baseline_ap.model
+```
+
 #### Implemented loss functions
 ```
 Softmax (softmax)
