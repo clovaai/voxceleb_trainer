@@ -199,12 +199,6 @@ while(1):
 
         scorefile.flush()
 
-    ## delete this section before release
-    if it == 100 and args.trainfunc == 'triplet':
-        s.__L__.hard_prob = 0.9
-        print('Changed hard prob to 0.9')
-    ## delete this section before release
-
     # ==================== SAVE MODEL ====================
 
     if it >= args.max_epoch:

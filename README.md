@@ -39,7 +39,8 @@ id00000 id00000/youtube_key/12345.wav
 id00012 id00012/21Uxsk56VDQ/00001.wav
 ```
 
-The test list can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/veri_test.txt).
+The train list for VoxCeleb2 can be download from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/train_list.txt) and the
+test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/veri_test.txt).
 
 #### Citation
 
@@ -49,7 +50,7 @@ Please cite the following if you make use of the code.
 @article{chung2020in,
   title={In defence of metric learning for speaker recognition},
   author={Chung, Joon Son and Huh, Jaesung and Mun, Seongkyu and Lee, Minjae and Heo, Hee Soo and Choe, Soyeon and Ham, Chiheon and Jung, Sunghwan and Lee, Bong-Jin and Han, Icksang},
-  journal={arXiv preprint arXiv:2003.xxxxx},
+  journal={arXiv preprint arXiv:2003.11982},
   year={2020}
 }
 ```
