@@ -165,8 +165,8 @@ while(1):
         sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f, (%2.2f, %2.2f), (%2.2f, %2.2f), EER %2.4f"%( max(clr), args.hard_prob, args.hard_rank, traineer, loss, result[0][0][1], result[0][0][2], result[0][1][1], result[0][1][2], result[1]));
-        scorefile.write("IT %d, LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f, (%2.2f, %2.2f), (%2.2f, %2.2f), EER %2.4f\n"%(it, max(clr), args.hard_prob, args.hard_rank, traineer, loss, result[0][0][1], result[0][0][2], result[0][1][1], result[0][1][2], result[1]));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f, EER %2.4f"%( max(clr), traineer, loss, result[1]));
+        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f, EER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
 
         scorefile.flush()
 
@@ -194,8 +194,8 @@ while(1):
 
     else:
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f"%( max(clr), args.hard_prob, args.hard_rank, traineer, loss));
-        scorefile.write("IT %d, LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f\n"%(it, max(clr), args.hard_prob, args.hard_rank, traineer, loss));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f"%( max(clr), traineer, loss));
+        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
 
         scorefile.flush()
 
