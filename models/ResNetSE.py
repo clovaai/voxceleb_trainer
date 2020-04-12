@@ -3,53 +3,40 @@
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn import Parameter
-import math
-import pdb
-
-def myphi(x,m):
-    x = x * m
-    return 1-x**2/math.factorial(2)+x**4/math.factorial(4)-x**6/math.factorial(6) + \
-            x**8/math.factorial(8) - x**9/math.factorial(9)
-
-def conv3x3(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
 
 class SEBasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, inChannels, outChannels, stride=1, downsample=None, reduction=8):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, reduction=8):
         super(SEBasicBlock, self).__init__()
-        self.conv1 = nn.Conv2d(inChannels, outChannels, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(outChannels)
-        self.conv2 = nn.Conv2d(outChannels, outChannels, kernel_size=3, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(outChannels)
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.se = SELayer(outChannels, reduction)
+        self.se = SELayer(planes, reduction)
         self.downsample = downsample
         self.stride = stride
 
     def forward(self, x):
-        residualVec = x
+        residual = x
 
-        outVec = self.conv1(x)
-        outVec = self.relu(outVec)
-        outVec = self.bn1(outVec)
+        out = self.conv1(x)
+        out = self.relu(out)
+        out = self.bn1(out)
 
-        outVec = self.conv2(outVec)
-        outVec = self.bn2(outVec)
-        outVec = self.se(outVec)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.se(out)
 
         if self.downsample is not None:
-            residualVec = self.downsample(x)
+            residual = self.downsample(x)
 
-        outVec += residualVec
-        outVec = self.relu(outVec)
-        return outVec
+        out += residual
+        out = self.relu(out)
+        return out
 
 
 class SEBottleneck(nn.Module):
@@ -211,11 +198,5 @@ class ResNetSE(nn.Module):
 def ResNetSE34(nOut=256, **kwargs):
     # Number of filters
     num_filters = [16, 32, 64, 128]
-    model = ResNetSE(SEBasicBlock, [3, 4, 6, 3], num_filters, nOut, **kwargs)
-    return model
-
-def ResNetSE34Fat(nOut=256, **kwargs):
-    # Number of filters
-    num_filters = [32, 64, 128, 256]
     model = ResNetSE(SEBasicBlock, [3, 4, 6, 3], num_filters, nOut, **kwargs)
     return model

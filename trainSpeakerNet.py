@@ -10,13 +10,6 @@ from tuneThreshold import tuneThresholdfromScore
 from SpeakerNet import SpeakerNet
 from DatasetLoader import DatasetLoader
 
-try:
-    import nsml
-    from nsml import DATASET_PATH
-except:
-    DATASET_PATH = ''
-    pass;
-
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
 ## Data loader
@@ -64,19 +57,9 @@ args = parser.parse_args();
 
 # ==================== INITIALISE LINE NOTIFY ====================
 
-if ("nsml" in sys.modules):
-    DATASET_PATH = os.path.join(DATASET_PATH,'train')
-    args.train_path     = os.path.join(DATASET_PATH,args.train_path)
-    args.test_path      = os.path.join(DATASET_PATH,args.test_path)
-    args.train_list     = os.path.join(DATASET_PATH,'train_list.txt')
-    args.test_list      = os.path.join(DATASET_PATH,'test_list.txt')
-    model_save_path     = "exps/model";
-    result_save_path    = "exps/results"
-    feat_save_path      = "feat"
-else:
-    model_save_path     = args.save_path+"/model"
-    result_save_path    = args.save_path+"/result"
-    feat_save_path      = ""
+model_save_path     = args.save_path+"/model"
+result_save_path    = args.save_path+"/result"
+feat_save_path      = ""
 
 # ==================== MAKE DIRECTORIES ====================
 
@@ -85,22 +68,16 @@ if not(os.path.exists(model_save_path)):
         
 if not(os.path.exists(result_save_path)):
     os.makedirs(result_save_path)
-else:
-    print("Folder already exists. Press Enter to continue...")
 
 # ==================== LOAD MODEL ====================
 
 s = SpeakerNet(**vars(args));
-
-if("nsml" in sys.modules):
-    nsml.bind(save=s.saveParameters, load=s.loadParameters);
 
 # ==================== EVALUATE LIST ====================
 
 it          = 1;
 prevloss    = float("inf");
 sumloss     = 0;
-min_eer     = [];
 
 # ==================== LOAD MODEL PARAMS ====================
 
@@ -152,7 +129,7 @@ trainLoader = DatasetLoader(args.train_list, gSize=gsize_dict[args.trainfunc], *
 clr = s.updateLearningRate(1)
 
 while(1):   
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %.5f..."%(args.model,max(clr)));
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %f..."%(args.model,max(clr)));
 
     loss, traineer = s.train_network(loader=trainLoader);
 
@@ -165,28 +142,14 @@ while(1):
         sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f, EER %2.4f"%( max(clr), traineer, loss, result[1]));
-        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f, EER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
+        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
 
         scorefile.flush()
 
         clr = s.updateLearningRate(args.lr_decay) 
 
         s.saveParameters(model_save_path+"/model%09d.model"%it);
-
-        min_eer.append(result[1])
-
-        if ("nsml" in sys.modules):
-            training_report = {};
-            training_report["summary"] = True;
-            training_report["epoch"] = it;
-            training_report["step"] = it;
-            training_report["train_loss"] = loss.item();
-            training_report["val_eer"] = result[1];
-            training_report["min_eer"] = min(min_eer);
-            training_report["lr"] = max(clr);
-
-            nsml.report(**training_report);
         
         eerfile = open(model_save_path+"/model%09d.eer"%it, 'w')
         eerfile.write('%.4f'%result[1])

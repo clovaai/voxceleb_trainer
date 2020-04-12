@@ -6,7 +6,6 @@ import numpy
 import random
 import pdb
 import os
-import torch.nn.functional as F
 import threading
 import time
 import math

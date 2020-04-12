@@ -5,19 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
-import math
-import pdb
 import torchaudio
-
-def save(model, filename):
-    with open(filename, "wb") as f:
-        torch.save(model, f);
-        print("%s saved successfully!"%filename);
-
-def load(filename):
-    net = torch.load(filename)
-    return net;
-
 
 class VGGVox40(nn.Module):
     def __init__(self, nOut = 1024, encoder_type='SAP', **kwargs):
