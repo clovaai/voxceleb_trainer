@@ -33,7 +33,7 @@ parser.add_argument("--hard_prob", type=float, default=0.5, help='Hard negative 
 parser.add_argument("--hard_rank", type=int, default=10,    help='Hard negative mining rank in the batch, only for some loss functions');
 parser.add_argument('--margin', type=float,  default=1,     help='Loss margin, only for some loss functions');
 parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, only for some loss functions');
-parser.add_argument('--nSpeakers', type=int, default=6200,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker for other losses');
+parser.add_argument('--nSpeakers', type=int, default=6200,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker per iteration for other losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -133,11 +133,11 @@ while(1):
 
     loss, traineer = s.train_network(loader=trainLoader);
 
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
-
     # ==================== EVALUATE LIST ====================
 
     if it % args.test_interval == 0:
+
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
 
         sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);

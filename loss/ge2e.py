@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time, pdb, numpy
+from accuracy import accuracy
 
 class GE2ELoss(nn.Module):
 
@@ -41,8 +42,7 @@ class GE2ELoss(nn.Module):
         cos_sim_matrix = cos_sim_matrix * self.w + self.b
         
         label = torch.from_numpy(numpy.asarray(range(0,stepsize))).cuda()
-
         nloss = self.criterion(cos_sim_matrix.view(-1,stepsize), torch.repeat_interleave(label,repeats=gsize,dim=0).cuda())
+        prec1, _    = accuracy(cos_sim_matrix.view(-1,stepsize).detach().cpu(), torch.repeat_interleave(label,repeats=gsize,dim=0).detach().cpu(), topk=(1, 5))
 
-
-        return nloss, 0
+        return nloss, prec1

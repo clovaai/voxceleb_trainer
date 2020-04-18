@@ -2,14 +2,14 @@
 # -*- encoding: utf-8 -*-
 
 import torch
+import torchaudio
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
-import torchaudio
 
-class VGGVox40(nn.Module):
+class VGGVox(nn.Module):
     def __init__(self, nOut = 1024, encoder_type='SAP', **kwargs):
-        super(VGGVox40, self).__init__();
+        super(VGGVox, self).__init__();
         
         self.encoder_type = encoder_type
 
@@ -71,9 +71,9 @@ class VGGVox40(nn.Module):
     def forward(self, x):
 
         x = self.torchfb(x)+1e-6
-        x = self.instancenorm(x.log()).detach()
+        x = self.instancenorm(x.log()).unsqueeze(1).detach()
 
-        x = self.netcnn(x.unsqueeze(1));
+        x = self.netcnn(x);
 
         if self.encoder_type == "MAX" or self.encoder_type == "TAP":
             x = self.encoder(x)
@@ -86,9 +86,6 @@ class VGGVox40(nn.Module):
             w = torch.matmul(h, self.attention).squeeze(dim=2)
             w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
             x = torch.sum(x * w, dim=1)
-
-        else:
-            raise ValueError('Undefined encoder')
 
         x = self.fc(x);
 

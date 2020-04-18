@@ -27,12 +27,12 @@ python ./trainSpeakerNet.py --model ResNetSE34 --encoder SAP --trainfunc amsoftm
 
 #### Pretrained model
 
-A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model).
+A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_lite_ap.model).
 
-You can check that the following script returns: `EER 2.2587`.
+You can check that the following script returns: `EER 2.2322`.
 
 ```
-python ./trainSpeakerNet.py --eval --model=ResNetSE34 --trainfunc angleproto --optimizer adam --save_path=data/test --max_frames=300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_ap.model
+python ./trainSpeakerNet.py --eval --model=ResNetSE34L --trainfunc angleproto --save_path=data/test --max_frames=300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
 ```
 
 #### Implemented loss functions
@@ -50,6 +50,7 @@ Angular Prototypical (angleproto)
 #### Implemented models and encoders
 ```
 ResNetSE34 (SAP)
+ResNetSE34L (SAP)
 VGGVox40 (SAP, TAP, MAX)
 ```
 
