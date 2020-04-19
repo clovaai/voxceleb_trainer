@@ -5,11 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy, math, pdb, sys, random
-import time, os, itertools, shutil
+import time, os, itertools, shutil, importlib
 from tuneThreshold import tuneThresholdfromScore
 from DatasetLoader import loadWAV
-from models.VGGVoxOpen import *
-from models.ResNetSE import *
 from loss.ge2e import GE2ELoss
 from loss.angleproto import AngleProtoLoss
 from loss.cosface import AMSoftmax
@@ -25,7 +23,8 @@ class SpeakerNet(nn.Module):
 
         argsdict = {'nOut': nOut, 'encoder_type':encoder_type}
 
-        self.__S__ = globals()[model](**argsdict).cuda();
+        SpeakerNetModel = importlib.import_module('models.'+model).__getattribute__(model)
+        self.__S__ = SpeakerNetModel(**argsdict).cuda();
 
         if trainfunc == 'angleproto':
             self.__L__ = AngleProtoLoss().cuda()
@@ -271,6 +270,7 @@ class SpeakerNet(nn.Module):
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
     def saveParameters(self, path):
+        
         torch.save(self.state_dict(), path);
 
 

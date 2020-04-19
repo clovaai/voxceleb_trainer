@@ -10,13 +10,6 @@ from tuneThreshold import tuneThresholdfromScore
 from SpeakerNet import SpeakerNet
 from DatasetLoader import DatasetLoader
 
-try:
-    import nsml
-    from nsml import DATASET_PATH
-except:
-    DATASET_PATH = ''
-    pass;
-
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
 ## Data loader
@@ -40,7 +33,7 @@ parser.add_argument("--hard_prob", type=float, default=0.5, help='Hard negative 
 parser.add_argument("--hard_rank", type=int, default=10,    help='Hard negative mining rank in the batch, only for some loss functions');
 parser.add_argument('--margin', type=float,  default=1,     help='Loss margin, only for some loss functions');
 parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, only for some loss functions');
-parser.add_argument('--nSpeakers', type=int, default=6200,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker for other losses');
+parser.add_argument('--nSpeakers', type=int, default=6200,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker per iteration for other losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -64,19 +57,9 @@ args = parser.parse_args();
 
 # ==================== INITIALISE LINE NOTIFY ====================
 
-if ("nsml" in sys.modules):
-    DATASET_PATH = os.path.join(DATASET_PATH,'train')
-    args.train_path     = os.path.join(DATASET_PATH,args.train_path)
-    args.test_path      = os.path.join(DATASET_PATH,args.test_path)
-    args.train_list     = os.path.join(DATASET_PATH,'train_list.txt')
-    args.test_list      = os.path.join(DATASET_PATH,'test_list.txt')
-    model_save_path     = "exps/model";
-    result_save_path    = "exps/results"
-    feat_save_path      = "feat"
-else:
-    model_save_path     = args.save_path+"/model"
-    result_save_path    = args.save_path+"/result"
-    feat_save_path      = ""
+model_save_path     = args.save_path+"/model"
+result_save_path    = args.save_path+"/result"
+feat_save_path      = ""
 
 # ==================== MAKE DIRECTORIES ====================
 
@@ -85,22 +68,16 @@ if not(os.path.exists(model_save_path)):
         
 if not(os.path.exists(result_save_path)):
     os.makedirs(result_save_path)
-else:
-    print("Folder already exists. Press Enter to continue...")
 
 # ==================== LOAD MODEL ====================
 
 s = SpeakerNet(**vars(args));
-
-if("nsml" in sys.modules):
-    nsml.bind(save=s.saveParameters, load=s.loadParameters);
 
 # ==================== EVALUATE LIST ====================
 
 it          = 1;
 prevloss    = float("inf");
 sumloss     = 0;
-min_eer     = [];
 
 # ==================== LOAD MODEL PARAMS ====================
 
@@ -152,41 +129,27 @@ trainLoader = DatasetLoader(args.train_list, gSize=gsize_dict[args.trainfunc], *
 clr = s.updateLearningRate(1)
 
 while(1):   
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %.5f..."%(args.model,max(clr)));
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %f..."%(args.model,max(clr)));
 
     loss, traineer = s.train_network(loader=trainLoader);
-
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
 
     # ==================== EVALUATE LIST ====================
 
     if it % args.test_interval == 0:
 
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
+
         sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f, (%2.2f, %2.2f), (%2.2f, %2.2f), EER %2.4f"%( max(clr), args.hard_prob, args.hard_rank, traineer, loss, result[0][0][1], result[0][0][2], result[0][1][1], result[0][1][2], result[1]));
-        scorefile.write("IT %d, LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f, (%2.2f, %2.2f), (%2.2f, %2.2f), EER %2.4f\n"%(it, max(clr), args.hard_prob, args.hard_rank, traineer, loss, result[0][0][1], result[0][0][2], result[0][1][1], result[0][1][2], result[1]));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
+        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
 
         scorefile.flush()
 
         clr = s.updateLearningRate(args.lr_decay) 
 
         s.saveParameters(model_save_path+"/model%09d.model"%it);
-
-        min_eer.append(result[1])
-
-        if ("nsml" in sys.modules):
-            training_report = {};
-            training_report["summary"] = True;
-            training_report["epoch"] = it;
-            training_report["step"] = it;
-            training_report["train_loss"] = loss.item();
-            training_report["val_eer"] = result[1];
-            training_report["min_eer"] = min(min_eer);
-            training_report["lr"] = max(clr);
-
-            nsml.report(**training_report);
         
         eerfile = open(model_save_path+"/model%09d.eer"%it, 'w')
         eerfile.write('%.4f'%result[1])
@@ -194,8 +157,8 @@ while(1):
 
     else:
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f"%( max(clr), args.hard_prob, args.hard_rank, traineer, loss));
-        scorefile.write("IT %d, LR %f, HP/HR %.2f/%d, TEER %2.2f, TLOSS %f\n"%(it, max(clr), args.hard_prob, args.hard_rank, traineer, loss));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f"%( max(clr), traineer, loss));
+        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
 
         scorefile.flush()
 

@@ -1,24 +1,38 @@
-This repository contains the code for 'In defence of metric learning for speaker recognition.'
+## VoxCeleb trainer
+
+This repository contains the training code for 'In defence of metric learning for speaker recognition.'
 
 #### Dependencies
 ```
 pip install -r requirements.txt
 ```
 
-#### Example
+#### Data preparation
+
+The following script can be used to download and prepare the VoxCeleb dataset for training.
 
 ```
-python ./trainSpeakerNet.py --model ResNetSE34 --encoder SAP --trainfunc amsoftmax --optimizer adam --save_path data/exp1 --batch_size 200 --max_frames 200 --scale 30 --margin 0.3 --train_list /home/joon/train_list.txt --test_list /home/joon/test_list.txt --train_path /home/joon/voxceleb2 --test_path /home/joon/voxceleb1
+python ./dataprep.py --save_path /home/joon/voxceleb --download --username USERNAME --password PASSWORD 
+python ./dataprep.py --save_path /home/joon/voxceleb --extract
+python ./dataprep.py --save_path /home/joon/voxceleb --convert
+```
+
+In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on the system.
+
+#### Training example
+
+```
+python ./trainSpeakerNet.py --model ResNetSE34 --encoder SAP --trainfunc amsoftmax --optimizer adam --save_path data/exp1 --batch_size 200 --max_frames 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
 #### Pretrained model
 
-A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model).
+A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_lite_ap.model).
 
-You can check that the following script returns: `EER 2.2587`.
+You can check that the following script returns: `EER 2.2322`.
 
 ```
-python ./trainSpeakerNet.py --eval --model=ResNetSE34 --trainfunc angleproto --optimizer adam --save_path=data/test --max_frames=300 --test_list /home/joon/test_list.txt --test_path /home/joon/voxceleb1 --initial_model baseline_ap.model
+python ./trainSpeakerNet.py --eval --model=ResNetSE34L --trainfunc angleproto --save_path=data/test --max_frames=300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
 ```
 
 #### Implemented loss functions
@@ -36,6 +50,7 @@ Angular Prototypical (angleproto)
 #### Implemented models and encoders
 ```
 ResNetSE34 (SAP)
+ResNetSE34L (SAP)
 VGGVox40 (SAP, TAP, MAX)
 ```
 
