@@ -71,23 +71,19 @@ class SpeakerNet(nn.Module):
         self.__max_frames__ = max_frames;
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
-    ## Train contrastive
+    ## Train network
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
     def train_network(self, loader):
-        # Positive margin - normalized
-        # Negative margin - unnormalized
 
         self.train();
-
-        # ==================== INITIAL PARAMETERS ====================
 
         stepsize = loader.batch_size;
 
         counter = 0;
         index   = 0;
         loss    = 0;
-        top1    = 0     # metric accuracy
+        top1    = 0     # EER or accuracy
 
         criterion = torch.nn.CrossEntropyLoss()
         

@@ -55,13 +55,10 @@ parser.add_argument('--nOut', type=int,         default=512,    help='Embedding 
 
 args = parser.parse_args();
 
-# ==================== INITIALISE LINE NOTIFY ====================
-
+## Initialise directories
 model_save_path     = args.save_path+"/model"
 result_save_path    = args.save_path+"/result"
 feat_save_path      = ""
-
-# ==================== MAKE DIRECTORIES ====================
 
 if not(os.path.exists(model_save_path)):
     os.makedirs(model_save_path)
@@ -69,18 +66,14 @@ if not(os.path.exists(model_save_path)):
 if not(os.path.exists(result_save_path)):
     os.makedirs(result_save_path)
 
-# ==================== LOAD MODEL ====================
-
+## Load models
 s = SpeakerNet(**vars(args));
-
-# ==================== EVALUATE LIST ====================
 
 it          = 1;
 prevloss    = float("inf");
 sumloss     = 0;
 
-# ==================== LOAD MODEL PARAMS ====================
-
+## Load model weights
 modelfiles = glob.glob('%s/model0*.model'%model_save_path)
 modelfiles.sort()
 
@@ -96,8 +89,7 @@ for ii in range(0,it-1):
     if ii % args.test_interval == 0:
         clr = s.updateLearningRate(args.lr_decay) 
 
-# ==================== EVAL ====================
-
+## Evaluation code
 if args.eval == True:
         
     sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
@@ -106,6 +98,7 @@ if args.eval == True:
 
     quit();
 
+## Write args to scorefile
 scorefile = open(result_save_path+"/scores.txt", "a+");
 
 for items in vars(args):
@@ -113,28 +106,24 @@ for items in vars(args):
     scorefile.write('%s %s\n'%(items, vars(args)[items]));
 scorefile.flush()
 
-# ==================== ASSERTION ====================
-
+## Assertion
 gsize_dict  = {'proto':args.nSpeakers, 'triplet':2, 'contrastive':2, 'softmax':1, 'amsoftmax':1, 'aamsoftmax':1, 'ge2e':args.nSpeakers, 'angleproto':args.nSpeakers}
 
 assert args.trainfunc in gsize_dict
 assert gsize_dict[args.trainfunc] <= 100
 
-# ==================== CHECK SPK ====================
-
-## print data stats
+## Initialise data loader
 trainLoader = DatasetLoader(args.train_list, gSize=gsize_dict[args.trainfunc], **vars(args));
 
-## update learning rate
 clr = s.updateLearningRate(1)
 
 while(1):   
     print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %f..."%(args.model,max(clr)));
 
+    ## Train network
     loss, traineer = s.train_network(loader=trainLoader);
 
-    # ==================== EVALUATE LIST ====================
-
+    ## Validate and save
     if it % args.test_interval == 0:
 
         print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
@@ -142,8 +131,8 @@ while(1):
         sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
-        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/T1 %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
+        scorefile.write("IT %d, LR %f, TEER/T1 %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
 
         scorefile.flush()
 
@@ -161,8 +150,6 @@ while(1):
         scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
 
         scorefile.flush()
-
-    # ==================== SAVE MODEL ====================
 
     if it >= args.max_epoch:
         quit();
