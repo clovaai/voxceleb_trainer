@@ -3,12 +3,12 @@
 # The script downloads the VoxCeleb datasets and converts all files to WAV.
 # Requirement: ffmpeg and wget running on a Linux system.
 
+from multiprocessing import Pool
+import numpy as np
 import argparse
 import os
 import subprocess
-import pdb
 import hashlib
-import time
 import glob
 from zipfile import ZipFile
 from tqdm import tqdm
@@ -16,11 +16,12 @@ from tqdm import tqdm
 ## ========== ===========
 ## Parse input arguments
 ## ========== ===========
-parser = argparse.ArgumentParser(description = "VoxCeleb downloader");
+parser = argparse.ArgumentParser(description = "VoxCeleb downloader")
 
-parser.add_argument('--save_path', 	type=str, default="data", help='Target directory');
-parser.add_argument('--user', 		type=str, default="user", help='Username');
-parser.add_argument('--password', 	type=str, default="pass", help='Password');
+parser.add_argument('--save_path', 	type=str, default="data", help='Target directory')
+parser.add_argument('--user', 		type=str, default="user", help='Username')
+parser.add_argument('--password', 	type=str, default="pass", help='Password')
+parser.add_argument('--n_workers', 	type=int, default=None, help='Number of workers on conversion task.')
 
 parser.add_argument('--download', dest='download', action='store_true', help='Enable download')
 parser.add_argument('--extract',  dest='extract',  action='store_true', help='Enable extract')
@@ -99,18 +100,27 @@ def extract(args):
 ## ========== ===========
 ## Convert
 ## ========== ===========
+
+def from_aac_to_wav(file_path):
+
+	outfile = file_path.replace('.m4a', '.wav')
+	out = subprocess.call(
+		'ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(file_path,outfile),
+		shell=True)
+	if out != 0:
+		raise ValueError('Conversion failed %s.' % file_path)
+	os.remove(file_path) ### uncomment if you want to remove the m4a files
+
 def convert(args):
 
-	folders = glob.glob('%s/voxceleb2/*/*/'%args.save_path)
-	files 	= glob.glob('%s/voxceleb2/*/*/*.m4a'%args.save_path)
+	files = glob.glob('%s/voxceleb2/*/*/*.m4a'%args.save_path)
 	files.sort()
 
-	print('Converting files from AAC to WAV')
-	for fname in tqdm(files):
-		outfile = fname.replace('.m4a','.wav')
-		out = subprocess.call('ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(fname,outfile), shell=True)
-		if out != 0:
-			raise ValueError('Conversion failed %s.'%fname)
+	print('Converting files from AAC to WAV (using ' + str(args.n_workers if args.n_workers else os.cpu_count()) +
+		  ' workers).')
+
+	with Pool(args.n_workers) as p:
+		list(tqdm(p.imap(from_aac_to_wav, files), total=len(files)))
 
 ## ========== ===========
 ## Main script
@@ -140,4 +150,3 @@ if __name__ == "__main__":
 
 	if args.convert:
 		convert(args)
-		
