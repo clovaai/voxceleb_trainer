@@ -33,7 +33,7 @@ parser.add_argument("--hard_prob", type=float, default=0.5, help='Hard negative 
 parser.add_argument("--hard_rank", type=int, default=10,    help='Hard negative mining rank in the batch, only for some loss functions');
 parser.add_argument('--margin', type=float,  default=1,     help='Loss margin, only for some loss functions');
 parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, only for some loss functions');
-parser.add_argument('--nSpeakers', type=int, default=6200,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker per iteration for other losses');
+parser.add_argument('--nSpeakers', type=int, default=5994,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker per iteration for other losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -50,7 +50,7 @@ parser.add_argument('--eval', dest='eval', action='store_true', help='Eval only'
 
 ## Model definition
 parser.add_argument('--model', type=str,        default="",     help='Name of model definition');
-parser.add_argument('--encoder', type=str,      default="SAP",  help='Type of encoder');
+parser.add_argument('--encoder_type', type=str, default="SAP",  help='Type of encoder');
 parser.add_argument('--nOut', type=int,         default=512,    help='Embedding size in the last FC layer');
 
 args = parser.parse_args();
