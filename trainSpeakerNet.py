@@ -53,7 +53,13 @@ parser.add_argument('--model', type=str,        default="",     help='Name of mo
 parser.add_argument('--encoder', type=str,      default="SAP",  help='Type of encoder');
 parser.add_argument('--nOut', type=int,         default=512,    help='Embedding size in the last FC layer');
 
+## Visible GPUs
+parser.add_argument('--gpus', type=str,        default="",     help='Set visible GPUs');
+
 args = parser.parse_args();
+
+## set visible gpus
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 
 ## Initialise directories
 model_save_path     = args.save_path+"/model"
