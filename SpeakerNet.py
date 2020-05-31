@@ -16,6 +16,9 @@ from loss.softmax import SoftmaxLoss
 from loss.protoloss import ProtoLoss
 from loss.pairwise import PairwiseLoss
 
+# To be able to run model in both cpu and gpu
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 class SpeakerNet(nn.Module):
 
     def __init__(self, max_frames, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', **kwargs):
@@ -24,38 +27,46 @@ class SpeakerNet(nn.Module):
         argsdict = {'nOut': nOut, 'encoder_type':encoder_type}
 
         SpeakerNetModel = importlib.import_module('models.'+model).__getattribute__(model)
-        self.__S__ = SpeakerNetModel(**argsdict).cuda();
+
+        self.__S__ = SpeakerNetModel(**argsdict)
+
+        # Enable use of multiple gpus if present
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            self.__S__ = nn.DataParallel(self.__S__)
+
+        self.__S__.to(device)
 
         if trainfunc == 'angleproto':
-            self.__L__ = AngleProtoLoss().cuda()
+            self.__L__ = AngleProtoLoss().to(device)
             self.__train_normalize__    = True
             self.__test_normalize__     = True
         elif trainfunc == 'ge2e':
-            self.__L__ = GE2ELoss().cuda()
+            self.__L__ = GE2ELoss().to(device)
             self.__train_normalize__    = True
             self.__test_normalize__     = True
         elif trainfunc == 'amsoftmax':
-            self.__L__ = AMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).cuda()
+            self.__L__ = AMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).to(device)
             self.__train_normalize__    = False
             self.__test_normalize__     = True
         elif trainfunc == 'aamsoftmax':
-            self.__L__ = AAMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).cuda()
+            self.__L__ = AAMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).to(device)
             self.__train_normalize__    = False
             self.__test_normalize__     = True
         elif trainfunc == 'softmax':
-            self.__L__ = SoftmaxLoss(in_feats=nOut, n_classes=nSpeakers).cuda()
+            self.__L__ = SoftmaxLoss(in_feats=nOut, n_classes=nSpeakers).to(device)
             self.__train_normalize__    = False
             self.__test_normalize__     = True
         elif trainfunc == 'proto':
-            self.__L__ = ProtoLoss().cuda()
+            self.__L__ = ProtoLoss().to(device)
             self.__train_normalize__    = False
             self.__test_normalize__     = False
         elif trainfunc == 'triplet':
-            self.__L__ = PairwiseLoss(loss_func='triplet', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).cuda()
+            self.__L__ = PairwiseLoss(loss_func='triplet', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).to(device)
             self.__train_normalize__    = True
             self.__test_normalize__     = True
         elif trainfunc == 'contrastive':
-            self.__L__ = PairwiseLoss(loss_func='contrastive', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).cuda()
+            self.__L__ = PairwiseLoss(loss_func='contrastive', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).to(device)
             self.__train_normalize__    = True
             self.__test_normalize__     = True
         else:
@@ -95,14 +106,14 @@ class SpeakerNet(nn.Module):
 
             feat = []
             for inp in data:
-                outp      = self.__S__.forward(inp.cuda())
+                outp      = self.__S__.forward(inp.to(device))
                 if self.__train_normalize__:
                     outp   = F.normalize(outp, p=2, dim=1)
                 feat.append(outp)
 
             feat = torch.stack(feat,dim=1).squeeze()
 
-            label   = torch.LongTensor(data_label).cuda()
+            label   = torch.LongTensor(data_label).to(device)
 
             nloss, prec1 = self.__L__.forward(feat,label)
 
@@ -188,7 +199,7 @@ class SpeakerNet(nn.Module):
         ## Save all features to file
         for idx, file in enumerate(setfiles):
 
-            inp1 = loadWAV(os.path.join(test_path,file), self.__max_frames__, evalmode=True, num_eval=num_eval).cuda()
+            inp1 = loadWAV(os.path.join(test_path,file), self.__max_frames__, evalmode=True, num_eval=num_eval).to(device)
 
             ref_feat = self.__S__.forward(inp1).detach().cpu()
 
@@ -216,19 +227,19 @@ class SpeakerNet(nn.Module):
             data = line.split();
 
             if feat_dir == '':
-                ref_feat = feats[data[1]].cuda()
-                com_feat = feats[data[2]].cuda()
+                ref_feat = feats[data[1]].to(device)
+                com_feat = feats[data[2]].to(device)
             else:
-                ref_feat = torch.load(os.path.join(feat_dir,filedict[data[1]])).cuda()
-                com_feat = torch.load(os.path.join(feat_dir,filedict[data[2]])).cuda()
+                ref_feat = torch.load(os.path.join(feat_dir,filedict[data[1]])).to(device)
+                com_feat = torch.load(os.path.join(feat_dir,filedict[data[2]])).to(device)
 
             if self.__test_normalize__:
                 ref_feat = F.normalize(ref_feat, p=2, dim=1)
                 com_feat = F.normalize(com_feat, p=2, dim=1)
 
-            dist = F.pairwise_distance(ref_feat.unsqueeze(-1).expand(-1,-1,num_eval), com_feat.unsqueeze(-1).expand(-1,-1,num_eval).transpose(0,2)).detach().cpu().numpy();
+            dist = F.pairwise_distance(ref_feat.unsqueeze(-1).expand(-1,-1,num_eval), com_feat.unsqueeze(-1).expand(-1,-1,num_eval).transpose(0,2)).detach().cpu().numpy();            
 
-            score = -1 * numpy.mean(dist);
+            score = -1 * numpy.mean(dist);            
 
             all_scores.append(score);  
             all_labels.append(int(data[0]));
@@ -277,7 +288,7 @@ class SpeakerNet(nn.Module):
     def loadParameters(self, path):
 
         self_state = self.state_dict();
-        loaded_state = torch.load(path);
+        loaded_state = torch.load(path, map_location=device);
         for name, param in loaded_state.items():
             origname = name;
             if name not in self_state:
