@@ -21,12 +21,12 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 #### Training examples
 
-AM-Softmax:
+- AM-Softmax:
 ```
 python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc amsoftmax --save_path data/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
-Angular prototypical:
+- Angular prototypical:
 ```
 python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
@@ -80,14 +80,14 @@ test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxcele
   - `Thin ResNet-34` is in the paper `ResNetSE34` in the code.
   - `Fast ResNet-34` is in the paper `ResNetSE34L` in the code.
 
-2. For metric learning objectives, the batch size in the paper is `nSpeakers` multiplied by `batch_size` in the code. For the batch size of 800 in the paper, use `--nSpeakers 2 --batch_size 400`, `--nSpeakers 3 --batch_size 266`, etc.
+2. For metric learning objectives, the batch size in the paper is `nPerSpeaker` multiplied by `batch_size` in the code. For the batch size of 800 in the paper, use `--nPerSpeaker 2 --batch_size 400`, `--nPerSpeaker 3 --batch_size 266`, etc.
 
 3. The models have been trained with `--max_frames 200` and evaluated with `--max_frames 400`.
 
 4. You can get a good balance between speed and performance using the configuration below.
 
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nSpeakers 2 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
 #### Citation
