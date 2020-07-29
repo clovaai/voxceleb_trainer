@@ -13,8 +13,9 @@ from DatasetLoader import DatasetLoader
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
 ## Data loader
-parser.add_argument('--max_frames', type=int, default=200,  help='Input length to the network');
-parser.add_argument('--batch_size', type=int, default=200,  help='Batch size');
+parser.add_argument('--max_frames',  type=int, default=200, help='Input length to the network for training');
+parser.add_argument('--eval_frames', type=int, default=300, help='Input length to the network for testing');
+parser.add_argument('--batch_size',  type=int, default=200, help='Batch size, number of speakers per batch');
 parser.add_argument('--max_seg_per_spk', type=int, default=100, help='Maximum number of utterances per speaker per epoch');
 parser.add_argument('--nDataLoaderThread', type=int, default=5, help='Number of loader threads');
 
@@ -33,7 +34,8 @@ parser.add_argument("--hard_prob", type=float, default=0.5, help='Hard negative 
 parser.add_argument("--hard_rank", type=int, default=10,    help='Hard negative mining rank in the batch, only for some loss functions');
 parser.add_argument('--margin', type=float,  default=1,     help='Loss margin, only for some loss functions');
 parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, only for some loss functions');
-parser.add_argument('--nSpeakers', type=int, default=5994,  help='Number of speakers in the softmax layer for softmax-based losses, utterances per speaker per iteration for other losses');
+parser.add_argument('--nPerSpeaker', type=int, default=1,   help='Number of utterances per speaker per batch, only for metric learning based losses');
+parser.add_argument('--nSpeakers', type=int, default=5994,  help='Number of speakers in the softmax layer, only for softmax-based losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -92,7 +94,7 @@ for ii in range(0,it-1):
 ## Evaluation code
 if args.eval == True:
         
-    sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
+    sc, lab = s.evaluateFromList(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path, eval_frames=args.eval_frames)
     result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
     print('EER %2.4f'%result[1])
 
@@ -107,13 +109,15 @@ for items in vars(args):
 scorefile.flush()
 
 ## Assertion
-gsize_dict  = {'proto':args.nSpeakers, 'triplet':2, 'contrastive':2, 'softmax':1, 'amsoftmax':1, 'aamsoftmax':1, 'ge2e':args.nSpeakers, 'angleproto':args.nSpeakers}
+gsize_dict  = {'triplet':2, 'contrastive':2, 'softmax':1, 'amsoftmax':1, 'aamsoftmax':1}
 
-assert args.trainfunc in gsize_dict
-assert gsize_dict[args.trainfunc] <= 100
+if args.trainfunc in gsize_dict:
+    assert gsize_dict[args.trainfunc] == args.nPerSpeaker
+else:
+    assert 2 <= args.nPerSpeaker and args.nPerSpeaker <= 100
 
 ## Initialise data loader
-trainLoader = DatasetLoader(args.train_list, gSize=gsize_dict[args.trainfunc], **vars(args));
+trainLoader = DatasetLoader(args.train_list, **vars(args));
 
 clr = s.updateLearningRate(1)
 
@@ -128,11 +132,11 @@ while(1):
 
         print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
 
-        sc, lab = s.evaluateFromListSave(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path)
+        sc, lab = s.evaluateFromList(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path, eval_frames=args.eval_frames)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/T1 %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
-        scorefile.write("IT %d, LR %f, TEER/T1 %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/TAcc %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
+        scorefile.write("IT %d, LR %f, TEER/TAcc %2.2f, TLOSS %f, VEER %2.4f\n"%(it, max(clr), traineer, loss, result[1]));
 
         scorefile.flush()
 
@@ -146,8 +150,8 @@ while(1):
 
     else:
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER %2.2f, TLOSS %f"%( max(clr), traineer, loss));
-        scorefile.write("IT %d, LR %f, TEER %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/TAcc %2.2f, TLOSS %f"%( max(clr), traineer, loss));
+        scorefile.write("IT %d, LR %f, TEER/TAcc %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
 
         scorefile.flush()
 

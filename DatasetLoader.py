@@ -49,7 +49,7 @@ def loadWAV(filename, max_frames, evalmode=True, num_eval=10):
     return feat;
 
 class DatasetLoader(object):
-    def __init__(self, dataset_file_name, batch_size, max_frames, max_seg_per_spk, nDataLoaderThread, gSize, train_path, maxQueueSize = 10, **kwargs):
+    def __init__(self, dataset_file_name, batch_size, max_frames, max_seg_per_spk, nDataLoaderThread, nPerSpeaker, train_path, maxQueueSize = 10, **kwargs):
         self.dataset_file_name = dataset_file_name;
         self.nWorkers = nDataLoaderThread;
         self.max_frames = max_frames;
@@ -60,7 +60,7 @@ class DatasetLoader(object):
         self.data_dict = {};
         self.data_list = [];
         self.nFiles = 0;
-        self.gSize  = gSize; ## number of clips per sample (e.g. 1 for softmax, 2 for triplet or pm)
+        self.nPerSpeaker  = nPerSpeaker; ## number of clips per sample (e.g. 1 for softmax, 2 for triplet or pm)
 
         self.dataLoaders = [];
         
@@ -97,7 +97,7 @@ class DatasetLoader(object):
                 continue;
 
             in_data = [];
-            for ii in range(0,self.gSize):
+            for ii in range(0,self.nPerSpeaker):
                 feat = []
                 for ij in range(index,index+self.batch_size):
                     feat.append(loadWAV(self.data_list[ij][ii], self.max_frames, evalmode=False));
@@ -127,9 +127,9 @@ class DatasetLoader(object):
         ## Data for each class
         for findex, key in enumerate(dictkeys):
             data    = self.data_dict[key]
-            numSeg  = round_down(min(len(data),self.max_seg_per_spk),self.gSize)
+            numSeg  = round_down(min(len(data),self.max_seg_per_spk),self.nPerSpeaker)
             
-            rp      = lol(numpy.random.permutation(len(data))[:numSeg],self.gSize)
+            rp      = lol(numpy.random.permutation(len(data))[:numSeg],self.nPerSpeaker)
             flattened_label.extend([findex] * (len(rp)))
             for indices in rp:
                 flattened_list.append([data[i] for i in indices])

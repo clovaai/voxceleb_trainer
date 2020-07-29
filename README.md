@@ -19,10 +19,16 @@ python ./dataprep.py --save_path /home/joon/voxceleb --convert
 
 In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on the system.
 
-#### Training example
+#### Training examples
 
+AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34 --encoder SAP --trainfunc amsoftmax --optimizer adam --save_path data/exp1 --batch_size 200 --max_frames 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc amsoftmax --save_path data/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+```
+
+Angular prototypical:
+```
+python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
 #### Pretrained model
@@ -32,7 +38,7 @@ A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg
 You can check that the following script returns: `EER 2.2322`.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --trainfunc angleproto --save_path data/test --max_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
 ```
 
 #### Implemented loss functions
@@ -89,10 +95,10 @@ python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_s
 Please cite the following if you make use of the code.
 
 ```
-@article{chung2020in,
+@inproceedings{chung2020in,
   title={In defence of metric learning for speaker recognition},
   author={Chung, Joon Son and Huh, Jaesung and Mun, Seongkyu and Lee, Minjae and Heo, Hee Soo and Choe, Soyeon and Ham, Chiheon and Jung, Sunghwan and Lee, Bong-Jin and Han, Icksang},
-  journal={arXiv preprint arXiv:2003.11982},
+  booktitle={Interspeech},
   year={2020}
 }
 ```

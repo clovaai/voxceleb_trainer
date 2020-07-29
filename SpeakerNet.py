@@ -18,7 +18,7 @@ from loss.pairwise import PairwiseLoss
 
 class SpeakerNet(nn.Module):
 
-    def __init__(self, max_frames, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', **kwargs):
+    def __init__(self, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', **kwargs):
         super(SpeakerNet, self).__init__();
 
         argsdict = {'nOut': nOut, 'encoder_type':encoder_type}
@@ -67,8 +67,6 @@ class SpeakerNet(nn.Module):
             self.__optimizer__ = torch.optim.SGD(self.parameters(), lr = lr, momentum = 0.9, weight_decay=5e-5);
         else:
             raise ValueError('Undefined optimizer.')
-        
-        self.__max_frames__ = max_frames;
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Train network
@@ -117,7 +115,7 @@ class SpeakerNet(nn.Module):
             telapsed = time.time() - tstart
 
             sys.stdout.write("\rProcessing (%d/%d) "%(index, loader.nFiles));
-            sys.stdout.write("Loss %f EER/T1 %2.3f%% - %.2f Hz "%(loss/counter, top1/counter, stepsize/telapsed));
+            sys.stdout.write("Loss %f TEER/TAcc %2.3f%% - %.2f Hz "%(loss/counter, top1/counter, stepsize/telapsed));
             sys.stdout.write("Q:(%d/%d)"%(loader.qsize(), loader.maxQueueSize));
             sys.stdout.flush();
 
@@ -154,7 +152,7 @@ class SpeakerNet(nn.Module):
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromListSave(self, listfilename, print_interval=5000, feat_dir='', test_path='', num_eval=10):
+    def evaluateFromList(self, listfilename, print_interval=100, feat_dir='', test_path='', num_eval=10, eval_frames=None):
         
         self.eval();
         
@@ -188,7 +186,7 @@ class SpeakerNet(nn.Module):
         ## Save all features to file
         for idx, file in enumerate(setfiles):
 
-            inp1 = loadWAV(os.path.join(test_path,file), self.__max_frames__, evalmode=True, num_eval=num_eval).cuda()
+            inp1 = loadWAV(os.path.join(test_path,file), eval_frames, evalmode=True, num_eval=num_eval).cuda()
 
             ref_feat = self.__S__.forward(inp1).detach().cpu()
 
@@ -203,7 +201,7 @@ class SpeakerNet(nn.Module):
             telapsed = time.time() - tstart
 
             if idx % print_interval == 0:
-                sys.stdout.write("\rReading %d: %.2f Hz, embed size %d"%(idx,idx/telapsed,ref_feat.size()[1]));
+                sys.stdout.write("\rReading %d of %d: %.2f Hz, embedding size %d"%(idx,len(setfiles),idx/telapsed,ref_feat.size()[1]));
 
         print('')
         all_scores = [];
@@ -235,7 +233,7 @@ class SpeakerNet(nn.Module):
 
             if idx % print_interval == 0:
                 telapsed = time.time() - tstart
-                sys.stdout.write("\rComputing %d: %.2f Hz"%(idx,idx/telapsed));
+                sys.stdout.write("\rComputing %d of %d: %.2f Hz"%(idx,len(lines),idx/telapsed));
                 sys.stdout.flush();
 
         if feat_dir != '':
