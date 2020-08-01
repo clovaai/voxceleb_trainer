@@ -123,49 +123,19 @@ class SpeakerNet(nn.Module):
         
         return (loss/counter, top1/counter);
 
-    ## ===== ===== ===== ===== ===== ===== ===== =====
-    ## Read data from list
-    ## ===== ===== ===== ===== ===== ===== ===== =====
-
-    def readDataFromList(self, listfilename):
-
-        data_list = {};
-
-        with open(listfilename) as listfile:
-            while True:
-                line = listfile.readline();
-                if not line:
-                    break;
-
-                data = line.split();
-                filename = data[1];
-                speaker_name = data[0]
-
-                if not (speaker_name in data_list):
-                    data_list[speaker_name] = [];
-                data_list[speaker_name].append(filename);
-
-        return data_list
-
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromList(self, listfilename, print_interval=100, feat_dir='', test_path='', num_eval=10, eval_frames=None):
+    def evaluateFromList(self, listfilename, print_interval=100, test_path='', num_eval=10, eval_frames=None):
         
         self.eval();
         
         lines       = []
         files       = []
-        filedict    = {}
         feats       = {}
         tstart      = time.time()
-
-        if feat_dir != '':
-            print('Saving temporary files to %s'%feat_dir)
-            if not(os.path.exists(feat_dir)):
-                os.makedirs(feat_dir)
 
         ## Read all lines
         with open(listfilename) as listfile:
@@ -175,6 +145,9 @@ class SpeakerNet(nn.Module):
                     break;
 
                 data = line.split();
+
+                ## Append random label if missing
+                if len(data) == 2: data = [random.randint(0,1)] + data
 
                 files.append(data[1])
                 files.append(data[2])
@@ -192,11 +165,7 @@ class SpeakerNet(nn.Module):
 
             filename = '%06d.wav'%idx
 
-            if feat_dir == '':
-                feats[file]     = ref_feat
-            else:
-                filedict[file]  = filename
-                torch.save(ref_feat,os.path.join(feat_dir,filename))
+            feats[file]     = ref_feat
 
             telapsed = time.time() - tstart
 
@@ -206,6 +175,7 @@ class SpeakerNet(nn.Module):
         print('')
         all_scores = [];
         all_labels = [];
+        all_trials = [];
         tstart = time.time()
 
         ## Read files and compute all scores
@@ -213,37 +183,32 @@ class SpeakerNet(nn.Module):
 
             data = line.split();
 
-            if feat_dir == '':
-                ref_feat = feats[data[1]].cuda()
-                com_feat = feats[data[2]].cuda()
-            else:
-                ref_feat = torch.load(os.path.join(feat_dir,filedict[data[1]])).cuda()
-                com_feat = torch.load(os.path.join(feat_dir,filedict[data[2]])).cuda()
+            ## Append random label if missing
+            if len(data) == 2: data = [random.randint(0,1)] + data
+
+            ref_feat = feats[data[1]].cuda()
+            com_feat = feats[data[2]].cuda()
 
             if self.__test_normalize__:
                 ref_feat = F.normalize(ref_feat, p=2, dim=1)
                 com_feat = F.normalize(com_feat, p=2, dim=1)
 
-            dist = F.pairwise_distance(ref_feat.unsqueeze(-1).expand(-1,-1,num_eval), com_feat.unsqueeze(-1).expand(-1,-1,num_eval).transpose(0,2)).detach().cpu().numpy();
+            dist = F.pairwise_distance(ref_feat.unsqueeze(-1), com_feat.unsqueeze(-1).transpose(0,2)).detach().cpu().numpy();
 
             score = -1 * numpy.mean(dist);
 
             all_scores.append(score);  
             all_labels.append(int(data[0]));
+            all_trials.append(data[1]+" "+data[2])
 
             if idx % print_interval == 0:
                 telapsed = time.time() - tstart
                 sys.stdout.write("\rComputing %d of %d: %.2f Hz"%(idx,len(lines),idx/telapsed));
                 sys.stdout.flush();
 
-        if feat_dir != '':
-            print(' Deleting temporary files.')
-            shutil.rmtree(feat_dir)
-
         print('\n')
 
-        return (all_scores, all_labels);
-
+        return (all_scores, all_labels, all_trials);
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Update learning rate

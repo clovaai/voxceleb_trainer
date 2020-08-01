@@ -35,7 +35,7 @@ python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc anglep
 
 A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_lite_ap.model).
 
-You can check that the following script returns: `EER 2.2322`.
+You can check that the following script returns: `EER 2.2322`. You will be given an option to save the scores.
 
 ```
 python ./trainSpeakerNet.py --eval --model ResNetSE34L --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model

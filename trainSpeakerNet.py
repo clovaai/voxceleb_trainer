@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(description = "SpeakerNet");
 
 ## Data loader
 parser.add_argument('--max_frames',  type=int, default=200, help='Input length to the network for training');
-parser.add_argument('--eval_frames', type=int, default=300, help='Input length to the network for testing');
+parser.add_argument('--eval_frames', type=int, default=300, help='Input length to the network for testing; 0 uses the whole files');
 parser.add_argument('--batch_size',  type=int, default=200, help='Batch size, number of speakers per batch');
 parser.add_argument('--max_seg_per_spk', type=int, default=100, help='Maximum number of utterances per speaker per epoch');
 parser.add_argument('--nDataLoaderThread', type=int, default=5, help='Number of loader threads');
@@ -60,7 +60,6 @@ args = parser.parse_args();
 ## Initialise directories
 model_save_path     = args.save_path+"/model"
 result_save_path    = args.save_path+"/result"
-feat_save_path      = ""
 
 if not(os.path.exists(model_save_path)):
     os.makedirs(model_save_path)
@@ -94,11 +93,25 @@ for ii in range(0,it-1):
 ## Evaluation code
 if args.eval == True:
         
-    sc, lab = s.evaluateFromList(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path, eval_frames=args.eval_frames)
+    sc, lab, trials = s.evaluateFromList(args.test_list, print_interval=100, test_path=args.test_path, eval_frames=args.eval_frames)
     result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
     print('EER %2.4f'%result[1])
 
-    quit();
+    ## Save scores
+    print('Type desired file name to save scores. Otherwise, leave blank.')
+    userinp = input()
+
+    while True:
+        if userinp == '':
+            quit();
+        elif os.path.exists(userinp):
+            print('%s already exists. Try again.'%(userinp))
+            userinp = input()
+        else:
+            with open(userinp,'w') as outfile:
+                for vi, val in enumerate(sc):
+                    outfile.write('%.4f %s\n'%(val,trials[vi]))
+            quit();
 
 ## Write args to scorefile
 scorefile = open(result_save_path+"/scores.txt", "a+");
@@ -132,7 +145,7 @@ while(1):
 
         print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
 
-        sc, lab = s.evaluateFromList(args.test_list, print_interval=100, feat_dir=feat_save_path, test_path=args.test_path, eval_frames=args.eval_frames)
+        sc, lab, _ = s.evaluateFromList(args.test_list, print_interval=100, test_path=args.test_path, eval_frames=args.eval_frames)
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
         print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/TAcc %2.2f, TLOSS %f, VEER %2.4f"%( max(clr), traineer, loss, result[1]));
@@ -144,9 +157,8 @@ while(1):
 
         s.saveParameters(model_save_path+"/model%09d.model"%it);
         
-        eerfile = open(model_save_path+"/model%09d.eer"%it, 'w')
-        eerfile.write('%.4f'%result[1])
-        eerfile.close()
+        with open(model_save_path+"/model%09d.eer"%it, 'w') as eerfile:
+            eerfile.write('%.4f'%result[1])
 
     else:
 
