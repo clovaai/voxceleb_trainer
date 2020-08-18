@@ -31,7 +31,7 @@ python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc amsoft
 python ./trainSpeakerNet.py --model ResNetSE34L --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
-#### Pretrained model
+#### Pretrained models
 
 A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_lite_ap.model).
 
@@ -40,6 +40,8 @@ You can check that the following script returns: `EER 2.2322`. You will be given
 ```
 python ./trainSpeakerNet.py --eval --model ResNetSE34L --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
 ```
+
+An alternative model using the `ResNetSE34` architecture can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model), and should return `EER 2.2587`.
 
 #### Implemented loss functions
 ```
