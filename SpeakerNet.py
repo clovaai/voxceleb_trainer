@@ -8,58 +8,19 @@ import numpy, math, pdb, sys, random
 import time, os, itertools, shutil, importlib
 from tuneThreshold import tuneThresholdfromScore
 from DatasetLoader import loadWAV
-from loss.ge2e import GE2ELoss
-from loss.angleproto import AngleProtoLoss
-from loss.cosface import AMSoftmax
-from loss.arcface import AAMSoftmax
-from loss.softmax import SoftmaxLoss
-from loss.protoloss import ProtoLoss
-from loss.pairwise import PairwiseLoss
 
 class SpeakerNet(nn.Module):
 
-    def __init__(self, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', **kwargs):
+    def __init__(self, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', n_mels=40, log_input=True, **kwargs):
         super(SpeakerNet, self).__init__();
 
-        argsdict = {'nOut': nOut, 'encoder_type':encoder_type}
+        argsdict = {'nOut': nOut, 'encoder_type':encoder_type, 'nClasses':nSpeakers, 'margin':margin, 'scale':scale, 'hard_prob':hard_prob, 'hard_rank':hard_rank, 'log_input':log_input, 'n_mels':n_mels}
 
-        SpeakerNetModel = importlib.import_module('models.'+model).__getattribute__(model)
+        SpeakerNetModel = importlib.import_module('models.'+model).__getattribute__('MainModel')
         self.__S__ = SpeakerNetModel(**argsdict).cuda();
 
-        if trainfunc == 'angleproto':
-            self.__L__ = AngleProtoLoss().cuda()
-            self.__train_normalize__    = True
-            self.__test_normalize__     = True
-        elif trainfunc == 'ge2e':
-            self.__L__ = GE2ELoss().cuda()
-            self.__train_normalize__    = True
-            self.__test_normalize__     = True
-        elif trainfunc == 'amsoftmax':
-            self.__L__ = AMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).cuda()
-            self.__train_normalize__    = False
-            self.__test_normalize__     = True
-        elif trainfunc == 'aamsoftmax':
-            self.__L__ = AAMSoftmax(in_feats=nOut, n_classes=nSpeakers, m=margin, s=scale).cuda()
-            self.__train_normalize__    = False
-            self.__test_normalize__     = True
-        elif trainfunc == 'softmax':
-            self.__L__ = SoftmaxLoss(in_feats=nOut, n_classes=nSpeakers).cuda()
-            self.__train_normalize__    = False
-            self.__test_normalize__     = True
-        elif trainfunc == 'proto':
-            self.__L__ = ProtoLoss().cuda()
-            self.__train_normalize__    = False
-            self.__test_normalize__     = False
-        elif trainfunc == 'triplet':
-            self.__L__ = PairwiseLoss(loss_func='triplet', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).cuda()
-            self.__train_normalize__    = True
-            self.__test_normalize__     = True
-        elif trainfunc == 'contrastive':
-            self.__L__ = PairwiseLoss(loss_func='contrastive', hard_rank=hard_rank, hard_prob=hard_prob, margin=margin).cuda()
-            self.__train_normalize__    = True
-            self.__test_normalize__     = True
-        else:
-            raise ValueError('Undefined loss.')
+        LossFunction = importlib.import_module('loss.'+trainfunc).__getattribute__('LossFunction')
+        self.__L__ = LossFunction(**argsdict).cuda();
 
         if optimizer == 'adam':
             self.__optimizer__ = torch.optim.Adam(self.parameters(), lr = lr);
@@ -94,8 +55,6 @@ class SpeakerNet(nn.Module):
             feat = []
             for inp in data:
                 outp      = self.__S__.forward(inp.cuda())
-                if self.__train_normalize__:
-                    outp   = F.normalize(outp, p=2, dim=1)
                 feat.append(outp)
 
             feat = torch.stack(feat,dim=1).squeeze()
@@ -141,7 +100,7 @@ class SpeakerNet(nn.Module):
         with open(listfilename) as listfile:
             while True:
                 line = listfile.readline();
-                if (not line): #  or (len(all_scores)==1000) 
+                if (not line):
                     break;
 
                 data = line.split();
@@ -189,7 +148,7 @@ class SpeakerNet(nn.Module):
             ref_feat = feats[data[1]].cuda()
             com_feat = feats[data[2]].cuda()
 
-            if self.__test_normalize__:
+            if self.__L__.test_normalize:
                 ref_feat = F.normalize(ref_feat, p=2, dim=1)
                 com_feat = F.normalize(com_feat, p=2, dim=1)
 
@@ -209,6 +168,7 @@ class SpeakerNet(nn.Module):
         print('\n')
 
         return (all_scores, all_labels, all_trials);
+
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Update learning rate

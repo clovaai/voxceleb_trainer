@@ -7,13 +7,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
 
-class VGGVox(nn.Module):
-    def __init__(self, nOut = 1024, encoder_type='SAP', **kwargs):
-        super(VGGVox, self).__init__();
-        
-        self.encoder_type = encoder_type
+class MainModel(nn.Module):
+    def __init__(self, nOut = 1024, encoder_type='SAP', log_input=True, **kwargs):
+        super(MainModel, self).__init__();
 
         print('Embedding size is %d, encoder %s.'%(nOut, encoder_type))
+        
+        self.encoder_type = encoder_type
+        self.log_input    = log_input
 
         self.netcnn = nn.Sequential(
             nn.Conv2d(1, 96, kernel_size=(5,7), stride=(1,2), padding=(2,2)),
@@ -71,7 +72,8 @@ class VGGVox(nn.Module):
     def forward(self, x):
 
         x = self.torchfb(x)+1e-6
-        x = self.instancenorm(x.log()).unsqueeze(1).detach()
+        if self.log_input: x = x.log()
+        x = self.instancenorm(x).unsqueeze(1).detach()
 
         x = self.netcnn(x);
 

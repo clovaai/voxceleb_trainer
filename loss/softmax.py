@@ -7,12 +7,14 @@ import torch.nn.functional as F
 import time, pdb, numpy
 from accuracy import accuracy
 
-class SoftmaxLoss(nn.Module):
-	def __init__(self, in_feats, n_classes=10):
-	    super(SoftmaxLoss, self).__init__()
+class LossFunction(nn.Module):
+	def __init__(self, nOut, nClasses, **kwargs):
+	    super(LossFunction, self).__init__()
+
+	    self.test_normalize = True
 	    
 	    self.criterion  = torch.nn.CrossEntropyLoss()
-	    self.fc 		= nn.Linear(in_feats,n_classes)
+	    self.fc 		= nn.Linear(nOut,nClasses)
 
 	    print('Initialised Softmax Loss')
 

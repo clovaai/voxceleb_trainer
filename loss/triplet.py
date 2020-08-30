@@ -9,24 +9,28 @@ from accuracy import accuracy
 from tuneThreshold import tuneThresholdfromScore
 import random
 
-class PairwiseLoss(nn.Module):
+class LossFunction(nn.Module):
 
-    def __init__(self, loss_func=None, hard_rank=0, hard_prob=0, margin=0):
-        super(PairwiseLoss, self).__init__()
-        self.loss_func  = loss_func
+    def __init__(self, hard_rank=0, hard_prob=0, margin=0, **kwargs):
+        super(LossFunction, self).__init__()
+
+        self.test_normalize = True
+        
         self.hard_rank  = hard_rank
         self.hard_prob  = hard_prob
         self.margin     = margin
 
-        print('Initialised Pairwise Loss')
+        print('Initialised Triplet Loss')
 
     def forward(self, x, label=None):
+
+        assert x.size()[1] == 2
         
-        out_anchor      = x[:,0,:]
-        out_positive    = x[:,1,:]
+        out_anchor      = F.normalize(x[:,0,:], p=2, dim=1)
+        out_positive    = F.normalize(x[:,1,:], p=2, dim=1)
         stepsize        = out_anchor.size()[0]
 
-        output  = -1 * (F.pairwise_distance(out_anchor.unsqueeze(-1).expand(-1,-1,stepsize),out_positive.unsqueeze(-1).expand(-1,-1,stepsize).transpose(0,2))**2)
+        output      = -1 * (F.pairwise_distance(out_anchor.unsqueeze(-1),out_positive.unsqueeze(-1).transpose(0,2))**2)
 
         negidx      = self.mineHardNegative(output.detach())
 
@@ -38,11 +42,8 @@ class PairwiseLoss(nn.Module):
         pos_dist    = F.pairwise_distance(out_anchor,out_positive)
         neg_dist    = F.pairwise_distance(out_anchor,out_negative)
 
-        ## loss functions
-        if self.loss_func == 'contrastive':
-            nloss       = torch.mean(torch.cat([torch.pow(pos_dist, 2),torch.pow(F.relu(self.margin - neg_dist), 2)],dim=0))
-        elif self.loss_func == 'triplet':
-            nloss   = torch.mean(F.relu(torch.pow(pos_dist, 2) - torch.pow(neg_dist, 2) + self.margin))
+        ## loss function
+        nloss   = torch.mean(F.relu(torch.pow(pos_dist, 2) - torch.pow(neg_dist, 2) + self.margin))
 
         scores = -1 * torch.cat([pos_dist,neg_dist],dim=0).detach().cpu().numpy()
 

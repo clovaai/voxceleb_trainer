@@ -36,6 +36,8 @@ parser.add_argument('--margin', type=float,  default=1,     help='Loss margin, o
 parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, only for some loss functions');
 parser.add_argument('--nPerSpeaker', type=int, default=1,   help='Number of utterances per speaker per batch, only for metric learning based losses');
 parser.add_argument('--nSpeakers', type=int, default=5994,  help='Number of speakers in the softmax layer, only for softmax-based losses');
+parser.add_argument('--n_mels',   type=int, default=40, help='Number of mel filterbanks');
+parser.add_argument('--log_input', dest='log_input', action='store_true', help='Log input features')
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -104,8 +106,8 @@ if args.eval == True:
     while True:
         if userinp == '':
             quit();
-        elif os.path.exists(userinp):
-            print('%s already exists. Try again.'%(userinp))
+        elif os.path.exists(userinp) or '.' not in userinp:
+            print('Invalid file name %s. Try again.'%(userinp))
             userinp = input()
         else:
             with open(userinp,'w') as outfile:
