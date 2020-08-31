@@ -23,13 +23,15 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input --encoder SAP --trainfunc amsoftmax --save_path data/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path data/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
 
 - Angular prototypical:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
 ```
+
+The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
 
 #### Pretrained models
 
@@ -38,10 +40,10 @@ A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg
 You can check that the following script returns: `EER 2.2322`. You will be given an option to save the scores.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
 ```
 
-An alternative model using the `ResNetSE34` architecture can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model), and should return `EER 2.2587`. Note that this model has been trained without the `--log_input` argument.
+An alternative model using the `ResNetSE34` architecture can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model), and should return `EER 2.2587`. Note that this model has been trained with `--log_input False`.
 
 #### Implemented loss functions
 ```

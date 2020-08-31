@@ -28,8 +28,6 @@ class ResNetSE(nn.Module):
         self.layer3 = self._make_layer(block, num_filters[2], layers[2], stride=(2, 2))
         self.layer4 = self._make_layer(block, num_filters[3], layers[3], stride=(2, 2))
 
-        self.avgpool = nn.AvgPool2d((9, 1), stride=1)
-
         self.instancenorm = nn.InstanceNorm1d(257)
 
         if self.encoder_type == "SAP":
@@ -88,7 +86,8 @@ class ResNetSE(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        x = self.avgpool(x)
+        
+        x = torch.mean(x, dim=2, keepdim=True)
 
         if self.encoder_type == "SAP":
             x = x.permute(0, 2, 1, 3)

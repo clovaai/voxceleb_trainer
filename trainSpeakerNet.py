@@ -2,6 +2,7 @@
 #-*- coding: utf-8 -*-
 
 import sys, time, os, argparse, socket
+import yaml
 import numpy
 import pdb
 import torch
@@ -11,6 +12,8 @@ from SpeakerNet import SpeakerNet
 from DatasetLoader import DatasetLoader
 
 parser = argparse.ArgumentParser(description = "SpeakerNet");
+
+parser.add_argument('--config', type=str, default=None,  help='Config YAML file');
 
 ## Data loader
 parser.add_argument('--max_frames',  type=int, default=200, help='Input length to the network for training');
@@ -37,7 +40,7 @@ parser.add_argument('--scale', type=float,   default=15,    help='Loss scale, on
 parser.add_argument('--nPerSpeaker', type=int, default=1,   help='Number of utterances per speaker per batch, only for metric learning based losses');
 parser.add_argument('--nSpeakers', type=int, default=5994,  help='Number of speakers in the softmax layer, only for softmax-based losses');
 parser.add_argument('--n_mels',   type=int, default=40, help='Number of mel filterbanks');
-parser.add_argument('--log_input', dest='log_input', action='store_true', help='Log input features')
+parser.add_argument('--log_input', type=bool, default=False, help='Log input features')
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str, default="", help='Initial model weights');
@@ -58,6 +61,23 @@ parser.add_argument('--encoder_type', type=str, default="SAP",  help='Type of en
 parser.add_argument('--nOut', type=int,         default=512,    help='Embedding size in the last FC layer');
 
 args = parser.parse_args();
+
+## Parse YAML
+def find_option_type(key, parser):
+    for opt in parser._get_optional_actions():
+        if ('--' + key) in opt.option_strings:
+           return opt.type
+    raise ValueError
+
+if args.config is not None:
+    with open(args.config, "r") as f:
+        yml_config = yaml.load(f, Loader=yaml.FullLoader)
+    for k, v in yml_config.items():
+        if k in args.__dict__:
+            typ = find_option_type(k, parser)
+            args.__dict__[k] = typ(v)
+        else:
+            sys.stderr.write("Ignored unknown parameter {} in yaml.\n".format(k))
 
 ## Initialise directories
 model_save_path     = args.save_path+"/model"
@@ -122,14 +142,6 @@ for items in vars(args):
     print(items, vars(args)[items]);
     scorefile.write('%s %s\n'%(items, vars(args)[items]));
 scorefile.flush()
-
-## Assertion
-gsize_dict  = {'triplet':2, 'contrastive':2, 'softmax':1, 'amsoftmax':1, 'aamsoftmax':1}
-
-if args.trainfunc in gsize_dict:
-    assert gsize_dict[args.trainfunc] == args.nPerSpeaker
-else:
-    assert 2 <= args.nPerSpeaker and args.nPerSpeaker <= 100
 
 ## Initialise data loader
 trainLoader = DatasetLoader(args.train_list, **vars(args));
