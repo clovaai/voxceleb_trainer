@@ -11,23 +11,22 @@ from DatasetLoader import loadWAV
 
 class SpeakerNet(nn.Module):
 
-    def __init__(self, lr = 0.0001, margin = 1, scale = 1, hard_rank = 0, hard_prob = 0, model="alexnet50", nOut = 512, nSpeakers = 1000, optimizer = 'adam', encoder_type = 'SAP', normalize = True, trainfunc='contrastive', n_mels=40, log_input=True, **kwargs):
+    def __init__(self, model, optimizer, scheduler, trainfunc, **kwargs):
         super(SpeakerNet, self).__init__();
 
-        argsdict = {'nOut': nOut, 'encoder_type':encoder_type, 'nClasses':nSpeakers, 'margin':margin, 'scale':scale, 'hard_prob':hard_prob, 'hard_rank':hard_rank, 'log_input':log_input, 'n_mels':n_mels}
-
         SpeakerNetModel = importlib.import_module('models.'+model).__getattribute__('MainModel')
-        self.__S__ = SpeakerNetModel(**argsdict).cuda();
+        self.__S__ = SpeakerNetModel(**kwargs).cuda();
 
         LossFunction = importlib.import_module('loss.'+trainfunc).__getattribute__('LossFunction')
-        self.__L__ = LossFunction(**argsdict).cuda();
+        self.__L__ = LossFunction(**kwargs).cuda();
 
-        if optimizer == 'adam':
-            self.__optimizer__ = torch.optim.Adam(self.parameters(), lr = lr);
-        elif optimizer == 'sgd':
-            self.__optimizer__ = torch.optim.SGD(self.parameters(), lr = lr, momentum = 0.9, weight_decay=5e-5);
-        else:
-            raise ValueError('Undefined optimizer.')
+        Optimizer = importlib.import_module('optimizer.'+optimizer).__getattribute__('Optimizer')
+        self.__optimizer__ = Optimizer(self.parameters(), **kwargs)
+
+        Scheduler = importlib.import_module('scheduler.'+scheduler).__getattribute__('Scheduler')
+        self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__, **kwargs)
+
+        assert self.lr_step in ['epoch', 'iteration']
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Train network
@@ -77,6 +76,10 @@ class SpeakerNet(nn.Module):
             sys.stdout.write("Loss %f TEER/TAcc %2.3f%% - %.2f Hz "%(loss/counter, top1/counter, stepsize/telapsed));
             sys.stdout.write("Q:(%d/%d)"%(loader.qsize(), loader.maxQueueSize));
             sys.stdout.flush();
+
+            if self.lr_step == 'iteration': self.__scheduler__.step()
+
+        if self.lr_step == 'epoch': self.__scheduler__.step()
 
         sys.stdout.write("\n");
         
@@ -168,20 +171,6 @@ class SpeakerNet(nn.Module):
         print('\n')
 
         return (all_scores, all_labels, all_trials);
-
-
-    ## ===== ===== ===== ===== ===== ===== ===== =====
-    ## Update learning rate
-    ## ===== ===== ===== ===== ===== ===== ===== =====
-
-    def updateLearningRate(self, alpha):
-
-        learning_rate = []
-        for param_group in self.__optimizer__.param_groups:
-            param_group['lr'] = param_group['lr']*alpha
-            learning_rate.append(param_group['lr'])
-
-        return learning_rate;
 
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
