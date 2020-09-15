@@ -4,6 +4,7 @@
 *.mp4
 *.pcm
 data/
+exps/
 core.*
 
 # Byte-compiled / optimized / DLL files

@@ -43,11 +43,11 @@ class SpeakerNet(nn.Module):
         loss    = 0;
         top1    = 0     # EER or accuracy
 
-        criterion = torch.nn.CrossEntropyLoss()
+        tstart = time.time()
         
         for data, data_label in loader:
 
-            tstart = time.time()
+            data = data.transpose(0,1)
 
             self.zero_grad();
 
@@ -71,10 +71,10 @@ class SpeakerNet(nn.Module):
             self.__optimizer__.step();
 
             telapsed = time.time() - tstart
+            tstart = time.time()
 
-            sys.stdout.write("\rProcessing (%d/%d) "%(index, loader.nFiles));
+            sys.stdout.write("\rProcessing (%d) "%(index));
             sys.stdout.write("Loss %f TEER/TAcc %2.3f%% - %.2f Hz "%(loss/counter, top1/counter, stepsize/telapsed));
-            sys.stdout.write("Q:(%d/%d)"%(loader.qsize(), loader.maxQueueSize));
             sys.stdout.flush();
 
             if self.lr_step == 'iteration': self.__scheduler__.step()
@@ -121,7 +121,7 @@ class SpeakerNet(nn.Module):
         ## Save all features to file
         for idx, file in enumerate(setfiles):
 
-            inp1 = loadWAV(os.path.join(test_path,file), eval_frames, evalmode=True, num_eval=num_eval).cuda()
+            inp1 = torch.FloatTensor(loadWAV(os.path.join(test_path,file), eval_frames, evalmode=True, num_eval=num_eval)).cuda()
 
             ref_feat = self.__S__.forward(inp1).detach().cpu()
 

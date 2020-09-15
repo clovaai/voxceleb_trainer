@@ -1,0 +1,2 @@
+http://www.openslr.org/resources/28/rirs_noises.zip e6f48e257286e05de56413b4779d8ffb
+http://www.openslr.org/resources/17/musan.tar.gz 0c472d4fc0c5141eca47ad1ffeb2a7df

@@ -10,8 +10,10 @@ import pdb
 import hashlib
 import time
 import glob
+import tarfile
 from zipfile import ZipFile
 from tqdm import tqdm
+from scipy.io import wavfile
 
 ## ========== ===========
 ## Parse input arguments
@@ -25,6 +27,7 @@ parser.add_argument('--password', 	type=str, default="pass", help='Password');
 parser.add_argument('--download', dest='download', action='store_true', help='Enable download')
 parser.add_argument('--extract',  dest='extract',  action='store_true', help='Enable extract')
 parser.add_argument('--convert',  dest='convert',  action='store_true', help='Enable convert')
+parser.add_argument('--augment',  dest='augment',  action='store_true', help='Download and extract augmentation files')
 
 args = parser.parse_args();
 
@@ -59,7 +62,7 @@ def download(args, lines):
 		if md5ck == md5gt:
 			print('Checksum successful %s.'%outfile)
 		else:
-			raise ValueError('Checksum failed %s.'%outfile)
+			raise Warning('Checksum failed %s.'%outfile)
 
 ## ========== ===========
 ## Concatenate file parts
@@ -79,29 +82,41 @@ def concatenate(args,lines):
 		if md5ck == md5gt:
 			print('Checksum successful %s.'%outfile)
 		else:
-			raise ValueError('Checksum failed %s.'%outfile)
+			raise Warning('Checksum failed %s.'%outfile)
 
 		out 	= subprocess.call('rm %s/%s' %(args.save_path,infile), shell=True)
 
 ## ========== ===========
 ## Extract zip files
 ## ========== ===========
-def extract(args):
+def full_extract(args, fname):
 
-	files = glob.glob('%s/*.zip'%args.save_path)
+	print('Extracting %s'%fname)
+	if fname.endswith(".tar.gz"):
+		with tarfile.open(fname, "r:gz") as tar:
+			tar.extractall(args.save_path)
+	elif fname.endswith(".zip"):
+		with ZipFile(fname, 'r') as zf:
+			zf.extractall(args.save_path)
 
-	for fname in files:
-		print('Extracting %s'%fname)
-		zf = ZipFile(fname, 'r')
-		zf.extractall(args.save_path)
-		zf.close()
+## ========== ===========
+## Partially extract zip files
+## ========== ===========
+def part_extract(args, fname, target):
+
+	print('Extracting %s'%fname)
+	with ZipFile(fname, 'r') as zf:
+		for infile in zf.namelist():
+			if any([infile.startswith(x) for x in target]):
+				zf.extract(infile,args.save_path)
+			# pdb.set_trace()
+			# zf.extractall(args.save_path)
 
 ## ========== ===========
 ## Convert
 ## ========== ===========
 def convert(args):
 
-	folders = glob.glob('%s/voxceleb2/*/*/'%args.save_path)
 	files 	= glob.glob('%s/voxceleb2/*/*/*.m4a'%args.save_path)
 	files.sort()
 
@@ -111,6 +126,25 @@ def convert(args):
 		out = subprocess.call('ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(fname,outfile), shell=True)
 		if out != 0:
 			raise ValueError('Conversion failed %s.'%fname)
+
+## ========== ===========
+## Split MUSAN for faster random access
+## ========== ===========
+def split_musan(args):
+
+	files = glob.glob('%s/musan/*/*/*.wav'%args.save_path)
+
+	audlen = 16000*5
+	audstr = 16000*3
+
+	for idx,file in enumerate(files):
+		fs,aud = wavfile.read(file)
+		writedir = os.path.splitext(file.replace('/musan/','/musan_split/'))[0]
+		os.makedirs(writedir)
+		for st in range(0,len(aud)-audlen,audstr):
+			wavfile.write(writedir+'/%05d.wav'%(st/fs),fs,aud[st:st+audlen])
+
+		print(idx,file)
 
 ## ========== ===========
 ## Main script
@@ -128,12 +162,23 @@ if __name__ == "__main__":
 	files = f.readlines()
 	f.close()
 
+	f = open('lists/augment.txt','r')
+	augfiles = f.readlines()
+	f.close()
+
+	if args.augment:
+		download(args,augfiles)
+		part_extract(args,os.path.join(args.save_path,'rirs_noises.zip'),['RIRS_NOISES/simulated_rirs/mediumroom','RIRS_NOISES/simulated_rirs/smallroom'])
+		full_extract(args,os.path.join(args.save_path,'musan.tar.gz'))
+		split_musan(args)
+
 	if args.download:
 		download(args,fileparts)
 
 	if args.extract:
 		concatenate(args, files)
-		extract(args)
+		for file in files:
+			full_extract(args,os.path.join(args.save_path,file.split()[1]))
 		out = subprocess.call('mv %s/dev/aac/* %s/aac/ && rm -r %s/dev' %(args.save_path,args.save_path,args.save_path), shell=True)
 		out = subprocess.call('mv %s/wav %s/voxceleb1' %(args.save_path,args.save_path), shell=True)
 		out = subprocess.call('mv %s/aac %s/voxceleb2' %(args.save_path,args.save_path), shell=True)

@@ -12,9 +12,14 @@ pip install -r requirements.txt
 The following script can be used to download and prepare the VoxCeleb dataset for training.
 
 ```
-python ./dataprep.py --save_path /home/joon/voxceleb --download --user USERNAME --password PASSWORD 
-python ./dataprep.py --save_path /home/joon/voxceleb --extract
-python ./dataprep.py --save_path /home/joon/voxceleb --convert
+python ./dataprep.py --save_path data --download --user USERNAME --password PASSWORD 
+python ./dataprep.py --save_path data --extract
+python ./dataprep.py --save_path data --convert
+```
+In order to use data augmentation, also run:
+
+```
+python ./dataprep.py --save_path data --augment
 ```
 
 In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on the system.
@@ -23,12 +28,12 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path data/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path exps/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
 ```
 
 - Angular prototypical:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc angleproto --save_path data/exp2 --nPerSpeaker 2 --batch_size 200 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
 ```
 
 The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
@@ -40,10 +45,10 @@ A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg
 You can check that the following script returns: `EER 2.2322`. You will be given an option to save the scores.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path data/test --eval_frames 300 --test_list /home/joon/voxceleb/test_list.txt --test_path /home/joon/voxceleb/voxceleb1 --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 300 --test_list test_list.txt --initial_model baseline_lite_ap.model
 ```
 
-An alternative model using the `ResNetSE34` architecture can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_ap.model), and should return `EER 2.2587`. Note that this model has been trained with `--log_input False`.
+A larger model can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_half_ap.model). The model has been trained with `--model ResNetSE34Half --n_mels 64 --encoder_type ASP` arguments and should return `EER 1.6596`.
 
 #### Implemented loss functions
 ```
@@ -94,7 +99,7 @@ test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxcele
 4. You can get a good balance between speed and performance using the configuration below.
 
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 --train_list /home/joon/voxceleb/train_list.txt --test_list /home/joon/voxceleb/test_list.txt --train_path /home/joon/voxceleb/voxceleb2 --test_path /home/joon/voxceleb/voxceleb1
+python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 --train_list train_list.txt --test_list test_list.txt 
 ```
 
 #### Citation

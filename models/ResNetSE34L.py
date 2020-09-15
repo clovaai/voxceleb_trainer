@@ -36,6 +36,10 @@ class ResNetSE(nn.Module):
             self.sap_linear = nn.Linear(num_filters[3] * block.expansion, num_filters[3] * block.expansion)
             self.attention = self.new_parameter(num_filters[3] * block.expansion, 1)
             out_dim = num_filters[3] * block.expansion
+        elif self.encoder_type == "ASP":
+            self.sap_linear = nn.Linear(num_filters[3] * block.expansion, num_filters[3] * block.expansion)
+            self.attention = self.new_parameter(num_filters[3] * block.expansion, 1)
+            out_dim = num_filters[3] * block.expansion * 2
         else:
             raise ValueError('Undefined encoder')
 
@@ -88,12 +92,19 @@ class ResNetSE(nn.Module):
         x = torch.mean(x, dim=2, keepdim=True)
 
         if self.encoder_type == "SAP":
-            x = x.permute(0, 2, 1, 3)
-            x = x.squeeze(dim=1).permute(0, 2, 1)  # batch * L * D
+            x = x.permute(0,3,1,2).squeeze(-1)
             h = torch.tanh(self.sap_linear(x))
             w = torch.matmul(h, self.attention).squeeze(dim=2)
             w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
             x = torch.sum(x * w, dim=1)
+        elif self.encoder_type == "ASP":
+            x = x.permute(0,3,1,2).squeeze(-1)
+            h = torch.tanh(self.sap_linear(x))
+            w = torch.matmul(h, self.attention).squeeze(dim=2)
+            w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
+            mu = torch.sum(x * w, dim=1)
+            rh = torch.sqrt( ( torch.sum((x**2) * w, dim=1) - mu**2 ).clamp(min=1e-5) )
+            x = torch.cat((mu,rh),1)
 
         x = x.view(x.size()[0], -1)
         x = self.fc(x)

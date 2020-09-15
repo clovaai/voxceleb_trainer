@@ -9,7 +9,7 @@ import torch
 import glob
 from tuneThreshold import tuneThresholdfromScore
 from SpeakerNet import SpeakerNet
-from DatasetLoader import DatasetLoader
+from DatasetLoader import get_data_loader
 
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
@@ -21,6 +21,7 @@ parser.add_argument('--eval_frames',    type=int,   default=300,    help='Input 
 parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch size, number of speakers per batch');
 parser.add_argument('--max_seg_per_spk', type=int,  default=100,    help='Maximum number of utterances per speaker per epoch');
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads');
+parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
 
 ## Training details
 parser.add_argument('--test_interval',  type=int,   default=10,     help='Test and save every [test_interval] epochs');
@@ -49,8 +50,10 @@ parser.add_argument('--save_path',      type=str,   default="./data/exp1", help=
 ## Training and test data
 parser.add_argument('--train_list',     type=str,   default="",     help='Train list');
 parser.add_argument('--test_list',      type=str,   default="",     help='Evaluation list');
-parser.add_argument('--train_path',     type=str,   default="voxceleb2", help='Absolute path to the train set');
-parser.add_argument('--test_path',      type=str,   default="voxceleb1", help='Absolute path to the test set');
+parser.add_argument('--train_path',     type=str,   default="data/voxceleb2", help='Absolute path to the train set');
+parser.add_argument('--test_path',      type=str,   default="data/voxceleb1", help='Absolute path to the test set');
+parser.add_argument('--musan_path',     type=str,   default="data/musan_split", help='Absolute path to the test set');
+parser.add_argument('--rir_path',       type=str,   default="data/RIRS_NOISES/simulated_rirs", help='Absolute path to the test set');
 
 ## Model definition
 parser.add_argument('--n_mels',         type=int,   default=40,     help='Number of mel filterbanks');
@@ -146,7 +149,7 @@ for items in vars(args):
 scorefile.flush()
 
 ## Initialise data loader
-trainLoader = DatasetLoader(args.train_list, **vars(args));
+trainLoader = get_data_loader(args.train_list, **vars(args));
 
 while(1):   
 
