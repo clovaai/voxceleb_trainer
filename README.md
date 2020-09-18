@@ -104,7 +104,7 @@ python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_s
 
 #### Citation
 
-Please cite the following if you make use of the code.
+Please cite the following if you make use of the code. Please see [here](References.md) for the full list of methods used in this trainer.
 
 ```
 @inproceedings{chung2020in,
