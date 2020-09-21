@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time, pdb, numpy
-from accuracy import accuracy
+from utils import accuracy
 
 class LossFunction(nn.Module):
 	def __init__(self, nOut, nClasses, **kwargs):

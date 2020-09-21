@@ -40,15 +40,21 @@ The arguments can also be passed as `--config path_to_config.yaml`. Note that th
 
 #### Pretrained models
 
-A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/models/baseline_lite_ap.model).
+A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_lite_ap.model).
 
-You can check that the following script returns: `EER 2.2322`. You will be given an option to save the scores.
+You can check that the following script returns: `EER 2.1792`. You will be given an option to save the scores.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 300 --test_list test_list.txt --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 400 --test_list test_list.txt --initial_model baseline_lite_ap.model
 ```
 
-A larger model can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_half_ap.model). The model has been trained with `--model ResNetSE34Half --n_mels 64 --encoder_type ASP` arguments and should return `EER 1.6596`.
+A larger model trained with data augmentation can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model). 
+
+The following script should return: `EER 1.1771`. 
+
+```
+python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400 --test_list test_list.txt --initial_model baseline_v2_ap.model
+```
 
 #### Implemented loss functions
 ```
@@ -64,7 +70,8 @@ Angular Prototypical (angleproto)
 #### Implemented models and encoders
 ```
 ResNetSE34 (SAP)
-ResNetSE34L (SAP)
+ResNetSE34L (SAP, ASP)
+ResNetSE34V2 (SAP, ASP)
 VGGVox40 (SAP, TAP, MAX)
 ```
 
