@@ -28,12 +28,12 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
 ```
 
 - Angular prototypical:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
 ```
 
 The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
