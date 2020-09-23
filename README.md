@@ -28,7 +28,7 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path exps/exp1 --nSpeakers 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
 ```
 
 - Angular prototypical:
