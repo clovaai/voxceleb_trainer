@@ -1,13 +1,32 @@
-## VoxCeleb trainer
+# VoxCeleb trainer
 
-This repository contains the training code for 'In defence of metric learning for speaker recognition.'
+This repository contains the framework for training speaker recognition models described in 'In defence of metric learning for speaker recognition.'
 
-#### Dependencies
+
+### Distributed training
+
+This branch contains experimental code for distributed training. It will be merged into `master` in the future.
+
+- GPU indices should be set using the command `export CUDA_VISIBLE_DEVICES=0,1,2,3`.
+
+- Evaluation is not performed between epochs during training.
+
+- Use `--distributed` flag to enable distributed training.
+
+- At every epoch, the whole dataset is passed through **each** GPU once. Therefore `test_interval` and `max_epochs` must be divided by the number of GPUs for the same number of forward passes as single GPU training. For example, `--test_interval 10` using 1 GPU should be equivalent to `--test_interval 2` using 5 GPUs.
+
+- If you run more than one distributed training session, you need to change the port.
+
+- The code only works on Linux systems with CUDA 9.2 or later.
+
+If you have any suggestions for improvement, please raise it as an issue.
+
+### Dependencies
 ```
 pip install -r requirements.txt
 ```
 
-#### Data preparation
+### Data preparation
 
 The following script can be used to download and prepare the VoxCeleb dataset for training.
 
@@ -24,21 +43,21 @@ python ./dataprep.py --save_path data --augment
 
 In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on the system.
 
-#### Training examples
+### Training examples
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
 ```
 
 - Angular prototypical:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
 ```
 
 The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
 
-#### Pretrained models
+### Pretrained models
 
 A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_lite_ap.model).
 
@@ -56,7 +75,7 @@ The following script should return: `EER 1.1771`.
 python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400 --test_list test_list.txt --initial_model baseline_v2_ap.model
 ```
 
-#### Implemented loss functions
+### Implemented loss functions
 ```
 Softmax (softmax)
 AM-Softmax (amsoftmax)
@@ -67,7 +86,7 @@ Triplet (triplet)
 Angular Prototypical (angleproto)
 ```
 
-#### Implemented models and encoders
+### Implemented models and encoders
 ```
 ResNetSE34 (SAP)
 ResNetSE34L (SAP, ASP)
@@ -75,11 +94,11 @@ ResNetSE34V2 (SAP, ASP)
 VGGVox40 (SAP, TAP, MAX)
 ```
 
-#### Adding new models and loss functions
+### Adding new models and loss functions
 
 You can add new models and loss functions to `models` and `loss` directories respectively. See the existing definitions for examples.
 
-#### Data
+### Data
 
 The [VoxCeleb](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/) datasets are used for these experiments.
 
@@ -92,7 +111,7 @@ id00012 id00012/21Uxsk56VDQ/00001.wav
 The train list for VoxCeleb2 can be download from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/train_list.txt) and the
 test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/veri_test.txt).
 
-#### Replicating the results from the paper
+### Replicating the results from the paper
 
 1. Model definitions
   - `VGG-M-40` in the paper is `VGGVox` in the code.
@@ -109,7 +128,7 @@ test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxcele
 python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 --train_list train_list.txt --test_list test_list.txt 
 ```
 
-#### Citation
+### Citation
 
 Please cite the following if you make use of the code. Please see [here](References.md) for the full list of methods used in this trainer.
 
@@ -122,7 +141,7 @@ Please cite the following if you make use of the code. Please see [here](Referen
 }
 ```
 
-#### License
+### License
 ```
 Copyright (c) 2020-present NAVER Corp.
 
