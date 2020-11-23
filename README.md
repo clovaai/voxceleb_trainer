@@ -1,25 +1,6 @@
 # VoxCeleb trainer
 
-This repository contains the framework for training speaker recognition models described in 'In defence of metric learning for speaker recognition.'
-
-
-### Distributed training
-
-This branch contains experimental code for distributed training. It will be merged into `master` in the future.
-
-- GPU indices should be set using the command `export CUDA_VISIBLE_DEVICES=0,1,2,3`.
-
-- Evaluation is not performed between epochs during training.
-
-- Use `--distributed` flag to enable distributed training.
-
-- At every epoch, the whole dataset is passed through **each** GPU once. Therefore `test_interval` and `max_epochs` must be divided by the number of GPUs for the same number of forward passes as single GPU training. For example, `--test_interval 10` using 1 GPU should be equivalent to `--test_interval 2` using 5 GPUs.
-
-- If you run more than one distributed training session, you need to change the port.
-
-- The code only works on Linux systems with CUDA 9.2 or later.
-
-If you have any suggestions for improvement, please raise it as an issue.
+This repository contains the framework for training speaker recognition models described in the paper '_In defence of metric learning for speaker recognition_'.
 
 ### Dependencies
 ```
@@ -47,32 +28,32 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 - AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3
 ```
 
 - Angular prototypical:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200 --train_list train_list.txt --test_list test_list.txt
+python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200
 ```
 
 The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
 
 ### Pretrained models
 
-A pretrained model can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_lite_ap.model).
+A pretrained model, described in [1], can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_lite_ap.model).
 
 You can check that the following script returns: `EER 2.1792`. You will be given an option to save the scores.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 400 --test_list test_list.txt --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 400 --initial_model baseline_lite_ap.model
 ```
 
-A larger model trained with data augmentation can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model). 
+A larger model trained with online data augmentation, described in [2], can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model). 
 
-The following script should return: `EER 1.1771`. 
+The following script should return: `EER 1.1771`.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400 --test_list test_list.txt --initial_model baseline_v2_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_ap.model
 ```
 
 ### Implemented loss functions
@@ -88,15 +69,32 @@ Angular Prototypical (angleproto)
 
 ### Implemented models and encoders
 ```
-ResNetSE34 (SAP)
 ResNetSE34L (SAP, ASP)
 ResNetSE34V2 (SAP, ASP)
 VGGVox40 (SAP, TAP, MAX)
 ```
 
+### Data augmentation
+
+`--augment True` enables online data augmentation, described in [2].
+
 ### Adding new models and loss functions
 
 You can add new models and loss functions to `models` and `loss` directories respectively. See the existing definitions for examples.
+
+### Accelerating training
+
+- Use `--mixedprec` flag to enable mixed precision training. This is recommended for Tesla V100, GeForce RTX 20 series or later models.
+
+- Use `--distributed` flag to enable distributed training.
+
+  - GPU indices should be set using the command `export CUDA_VISIBLE_DEVICES=0,1,2,3`.
+
+  - Evaluation is not performed between epochs during training.
+
+  - If you are running more than one distributed training session, you need to change the port.
+
+  - At every epoch, the whole dataset is passed through **each** GPU once. Therefore `test_interval` and `max_epochs` must be divided by the number of GPUs for the same number of forward passes as single GPU training.
 
 ### Data
 
@@ -114,9 +112,10 @@ test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxcele
 ### Replicating the results from the paper
 
 1. Model definitions
-  - `VGG-M-40` in the paper is `VGGVox` in the code.
-  - `Thin ResNet-34` is in the paper `ResNetSE34` in the code.
-  - `Fast ResNet-34` is in the paper `ResNetSE34L` in the code.
+  - `VGG-M-40` in [1] is `VGGVox` in the repository.
+  - `Thin ResNet-34` in [1] is `ResNetSE34` in the repository.
+  - `Fast ResNet-34` in [1] is `ResNetSE34L` in the repository.
+  - `H / ASP` in [2] is `ResNetSE34V2` in the repository.
 
 2. For metric learning objectives, the batch size in the paper is `nPerSpeaker` multiplied by `batch_size` in the code. For the batch size of 800 in the paper, use `--nPerSpeaker 2 --batch_size 400`, `--nPerSpeaker 3 --batch_size 266`, etc.
 
@@ -125,18 +124,29 @@ test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxcele
 4. You can get a good balance between speed and performance using the configuration below.
 
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 --train_list train_list.txt --test_list test_list.txt 
+python ./trainSpeakerNet.py --model ResNetSE34L --trainfunc angleproto --batch_size 400 --nPerSpeaker 2 
 ```
 
 ### Citation
 
-Please cite the following if you make use of the code. Please see [here](References.md) for the full list of methods used in this trainer.
+Please cite [1] if you make use of the code. Please see [here](References.md) for the full list of methods used in this trainer.
 
+[1] _In defence of metric learning for speaker recognition_
 ```
 @inproceedings{chung2020in,
   title={In defence of metric learning for speaker recognition},
   author={Chung, Joon Son and Huh, Jaesung and Mun, Seongkyu and Lee, Minjae and Heo, Hee Soo and Choe, Soyeon and Ham, Chiheon and Jung, Sunghwan and Lee, Bong-Jin and Han, Icksang},
   booktitle={Interspeech},
+  year={2020}
+}
+```
+
+[2] _Clova baseline system for the VoxCeleb Speaker Recognition Challenge 2020_
+```
+@article{heo2020clova,
+  title={Clova baseline system for the {VoxCeleb} Speaker Recognition Challenge 2020},
+  author={Heo, Hee Soo and Lee, Bong-Jin and Huh, Jaesung and Chung, Joon Son},
+  journal={arXiv preprint arXiv:2009.14153},
   year={2020}
 }
 ```

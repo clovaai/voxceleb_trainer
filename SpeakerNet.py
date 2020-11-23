@@ -7,7 +7,9 @@ import torch.nn.functional as F
 import numpy, math, pdb, sys, random
 import time, os, itertools, shutil, importlib
 from tuneThreshold import tuneThresholdfromScore
-from DatasetLoader import loadWAV
+from DatasetLoader import test_dataset_loader
+
+from torch.cuda.amp import autocast, GradScaler
 
 class WrappedModel(nn.Module):
 
@@ -43,7 +45,9 @@ class SpeakerNet(nn.Module):
             return outp
 
         else:
+
             outp    = outp.reshape(self.nPerSpeaker,-1,outp.size()[-1]).transpose(1,0).squeeze(1)
+
             nloss, prec1 = self.__L__.forward(outp,label)
 
             return nloss, prec1
@@ -51,7 +55,7 @@ class SpeakerNet(nn.Module):
 
 class ModelTrainer(object):
 
-    def __init__(self, speaker_model, optimizer, scheduler, gpu, **kwargs):
+    def __init__(self, speaker_model, optimizer, scheduler, gpu, mixedprec, **kwargs):
 
         self.__model__  = speaker_model
 
@@ -61,7 +65,11 @@ class ModelTrainer(object):
         Scheduler = importlib.import_module('scheduler.'+scheduler).__getattribute__('Scheduler')
         self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__, **kwargs)
 
+        self.scaler = GradScaler() 
+
         self.gpu = gpu
+
+        self.mixedprec = mixedprec
 
         assert self.lr_step in ['epoch', 'iteration']
 
@@ -90,15 +98,24 @@ class ModelTrainer(object):
 
             label   = torch.LongTensor(data_label).cuda()
 
-            nloss, prec1 = self.__model__(data, label)
+            if self.mixedprec:
+                with autocast():
+                    nloss, prec1 = self.__model__(data, label)
+                self.scaler.scale(nloss).backward();
+                self.scaler.step(self.__optimizer__);
+                self.scaler.update();       
+            else:
+                nloss, prec1 = self.__model__(data, label)
+                nloss.backward();
+                self.__optimizer__.step();
+
 
             loss    += nloss.detach().cpu();
-            top1    += prec1
+            top1    += prec1.detach().cpu()
             counter += 1;
             index   += stepsize;
 
-            nloss.backward();
-            self.__optimizer__.step();
+        
 
             telapsed = time.time() - tstart
             tstart = time.time()
@@ -121,7 +138,7 @@ class ModelTrainer(object):
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromList(self, listfilename, print_interval=100, test_path='', num_eval=10, eval_frames=None):
+    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, print_interval=100, num_eval=10, **kwargs):
         
         self.__model__.eval();
         
@@ -131,34 +148,30 @@ class ModelTrainer(object):
         tstart      = time.time()
 
         ## Read all lines
-        with open(listfilename) as listfile:
-            while True:
-                line = listfile.readline();
-                if (not line):
-                    break;
+        with open(test_list) as f:
+            lines = f.readlines()
 
-                data = line.split();
-
-                ## Append random label if missing
-                if len(data) == 2: data = [random.randint(0,1)] + data
-
-                files.append(data[1])
-                files.append(data[2])
-                lines.append(line)
-
+        ## Get a list of unique file names
+        files = sum([x.strip().split()[-2:] for x in lines],[])
         setfiles = list(set(files))
         setfiles.sort()
 
-        ## Save all features to file
-        for idx, file in enumerate(setfiles):
+        ## Define test data loader
+        test_dataset = test_dataset_loader(setfiles, test_path, num_eval=num_eval, **kwargs)
+        test_loader = torch.utils.data.DataLoader(
+            test_dataset,
+            batch_size=1,
+            shuffle=False,
+            num_workers=nDataLoaderThread,
+            drop_last=False,
+        )
 
-            inp1 = torch.FloatTensor(loadWAV(os.path.join(test_path,file), eval_frames, evalmode=True, num_eval=num_eval)).cuda()
-
-            ref_feat    = self.__model__(inp1).detach().cpu()
-
-            feats[file] = ref_feat
-
-            telapsed    = time.time() - tstart
+        ## Extract features for every image
+        for idx, data in enumerate(test_loader):
+            inp1                = data[0][0].cuda()
+            ref_feat            = self.__model__(inp1).detach().cpu()
+            feats[data[1][0]]   = ref_feat
+            telapsed            = time.time() - tstart
 
             if idx % print_interval == 0:
                 sys.stdout.write("\rReading %d of %d: %.2f Hz, embedding size %d"%(idx,len(setfiles),idx/telapsed,ref_feat.size()[1]));
@@ -197,7 +210,7 @@ class ModelTrainer(object):
                 sys.stdout.write("\rComputing %d of %d: %.2f Hz"%(idx,len(lines),idx/telapsed));
                 sys.stdout.flush();
 
-        print('\n')
+        print('')
 
         return (all_scores, all_labels, all_trials);
 

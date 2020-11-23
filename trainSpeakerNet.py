@@ -15,6 +15,10 @@ from DatasetLoader import get_data_loader
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
+# ## ===== ===== ===== ===== ===== ===== ===== =====
+# ## Parse arguments
+# ## ===== ===== ===== ===== ===== ===== ===== =====
+
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
 parser.add_argument('--config',         type=str,   default=None,   help='Config YAML file');
@@ -42,18 +46,18 @@ parser.add_argument('--weight_decay',   type=float, default=0,      help='Weight
 ## Loss functions
 parser.add_argument("--hard_prob",      type=float, default=0.5,    help='Hard negative mining probability, otherwise random, only for some loss functions');
 parser.add_argument("--hard_rank",      type=int,   default=10,     help='Hard negative mining rank in the batch, only for some loss functions');
-parser.add_argument('--margin',         type=float, default=1,      help='Loss margin, only for some loss functions');
-parser.add_argument('--scale',          type=float, default=15,     help='Loss scale, only for some loss functions');
+parser.add_argument('--margin',         type=float, default=0.1,    help='Loss margin, only for some loss functions');
+parser.add_argument('--scale',          type=float, default=30,     help='Loss scale, only for some loss functions');
 parser.add_argument('--nPerSpeaker',    type=int,   default=1,      help='Number of utterances per speaker per batch, only for metric learning based losses');
 parser.add_argument('--nClasses',       type=int,   default=5994,   help='Number of speakers in the softmax layer, only for softmax-based losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str,   default="",     help='Initial model weights');
-parser.add_argument('--save_path',      type=str,   default="./data/exp1", help='Path for model and logs');
+parser.add_argument('--save_path',      type=str,   default="exps/exp1", help='Path for model and logs');
 
 ## Training and test data
-parser.add_argument('--train_list',     type=str,   default="",     help='Train list');
-parser.add_argument('--test_list',      type=str,   default="",     help='Evaluation list');
+parser.add_argument('--train_list',     type=str,   default="data/train_list.txt",  help='Train list');
+parser.add_argument('--test_list',      type=str,   default="data/test_list.txt",   help='Evaluation list');
 parser.add_argument('--train_path',     type=str,   default="data/voxceleb2", help='Absolute path to the train set');
 parser.add_argument('--test_path',      type=str,   default="data/voxceleb1", help='Absolute path to the test set');
 parser.add_argument('--musan_path',     type=str,   default="data/musan_split", help='Absolute path to the test set');
@@ -69,9 +73,10 @@ parser.add_argument('--nOut',           type=int,   default=512,    help='Embedd
 ## For test only
 parser.add_argument('--eval',           dest='eval', action='store_true', help='Eval only')
 
-## Distributed training
+## Distributed and mixed precision training
 parser.add_argument('--port',           type=str,   default="8888", help='Port for distributed training, input as text');
 parser.add_argument('--distributed',    dest='distributed', action='store_true', help='Enable distributed training')
+parser.add_argument('--mixedprec',      dest='mixedprec',   action='store_true', help='Enable mixed precision training')
 
 args = parser.parse_args();
 
@@ -120,13 +125,10 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         s = WrappedModel(s).cuda(args.gpu)
 
-    prevloss    = float("inf");
-    sumloss     = 0;
-    min_eer     = [100];
     it          = 1
 
     ## Write args to scorefile
-    scorefile = open(args.result_save_path+"/scores.txt", "a+");
+    scorefile   = open(args.result_save_path+"/scores.txt", "a+");
 
     ## Initialise trainer and data loader
     trainLoader = get_data_loader(args.train_list, **vars(args));
@@ -150,12 +152,24 @@ def main_worker(gpu, ngpus_per_node, args):
     ## Evaluation code - must run on single GPU
     if args.eval == True:
 
+        pytorch_total_params = sum(p.numel() for p in s.module.__S__.parameters())
+
+        print('Total parameters: ',pytorch_total_params)
+        print('Test list',args.test_list)
+
         assert args.distributed == False
             
-        sc, lab, _ = trainer.evaluateFromList(args.test_list, print_interval=100, test_path=args.test_path, eval_frames=args.eval_frames)
+        sc, lab, _ = trainer.evaluateFromList(**vars(args))
         result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-        print(result[1])
+        p_target = 0.05
+        c_miss = 1
+        c_fa = 1
+
+        fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
+        mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa)
+
+        print('EER %2.4f MinDCF %.5f'%(result[1],mindcf))
         quit();
 
     ## Save training code and params
@@ -181,6 +195,14 @@ def main_worker(gpu, ngpus_per_node, args):
         loss, traineer = trainer.train_network(trainLoader, verbose=(args.gpu == 0));
 
         if it % args.test_interval == 0 and args.gpu == 0:
+
+            ## Perform evaluation only in single GPU training
+            if not args.distributed:
+                sc, lab, _ = trainer.evaluateFromList(**vars(args))
+                result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
+
+                print("IT %d, VEER %2.4f"%(it, result[1]));
+                scorefile.write("IT %d, VEER %2.4f\n"%(it, result[1]));
 
             trainer.saveParameters(args.model_save_path+"/model%09d.model"%it);
 
@@ -214,6 +236,7 @@ def main():
     print('Python Version:', sys.version)
     print('PyTorch Version:', torch.__version__)
     print('Number of GPUs:', torch.cuda.device_count())
+    print('Save path:',args.save_path)
 
     if args.distributed:
         mp.spawn(main_worker, nprocs=n_gpus, args=(n_gpus, args))

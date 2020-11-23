@@ -39,7 +39,7 @@ class LossFunction(nn.Module):
         # cos(theta)
         cosine = F.linear(F.normalize(x), F.normalize(self.weight))
         # cos(theta + m)
-        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+        sine = torch.sqrt((1.0 - torch.mul(cosine, cosine)).clamp(0, 1))
         phi = cosine * self.cos_m - sine * self.sin_m
 
         if self.easy_margin:
@@ -53,6 +53,6 @@ class LossFunction(nn.Module):
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
         output = output * self.s
 
-        loss = self.ce(output, label)
-        prec1, _    = accuracy(output.detach().cpu(), label.detach().cpu(), topk=(1, 5))
+        loss    = self.ce(output, label)
+        prec1   = accuracy(output.detach(), label.detach(), topk=(1,))[0]
         return loss, prec1

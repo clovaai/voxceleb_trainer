@@ -48,6 +48,6 @@ class LossFunction(nn.Module):
         
         label = torch.from_numpy(numpy.asarray(range(0,stepsize))).cuda()
         nloss = self.criterion(cos_sim_matrix.view(-1,stepsize), torch.repeat_interleave(label,repeats=gsize,dim=0).cuda())
-        prec1, _    = accuracy(cos_sim_matrix.view(-1,stepsize).detach().cpu(), torch.repeat_interleave(label,repeats=gsize,dim=0).detach().cpu(), topk=(1, 5))
+        prec1 = accuracy(cos_sim_matrix.view(-1,stepsize).detach(), torch.repeat_interleave(label,repeats=gsize,dim=0).detach(), topk=(1,))[0]
 
         return nloss, prec1
