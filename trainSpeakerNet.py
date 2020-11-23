@@ -7,9 +7,17 @@ import numpy
 import pdb
 import torch
 import glob
-from tuneThreshold import tuneThresholdfromScore
-from SpeakerNet import SpeakerNet
+import zipfile
+import datetime
+from tuneThreshold import *
+from SpeakerNet import *
 from DatasetLoader import get_data_loader
+import torch.distributed as dist
+import torch.multiprocessing as mp
+
+# ## ===== ===== ===== ===== ===== ===== ===== =====
+# ## Parse arguments
+# ## ===== ===== ===== ===== ===== ===== ===== =====
 
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
@@ -19,7 +27,7 @@ parser.add_argument('--config',         type=str,   default=None,   help='Config
 parser.add_argument('--max_frames',     type=int,   default=200,    help='Input length to the network for training');
 parser.add_argument('--eval_frames',    type=int,   default=300,    help='Input length to the network for testing; 0 uses the whole files');
 parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch size, number of speakers per batch');
-parser.add_argument('--max_seg_per_spk', type=int,  default=100,    help='Maximum number of utterances per speaker per epoch');
+parser.add_argument('--max_seg_per_spk', type=int,  default=500,    help='Maximum number of utterances per speaker per epoch');
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads');
 parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
 
@@ -38,18 +46,18 @@ parser.add_argument('--weight_decay',   type=float, default=0,      help='Weight
 ## Loss functions
 parser.add_argument("--hard_prob",      type=float, default=0.5,    help='Hard negative mining probability, otherwise random, only for some loss functions');
 parser.add_argument("--hard_rank",      type=int,   default=10,     help='Hard negative mining rank in the batch, only for some loss functions');
-parser.add_argument('--margin',         type=float, default=1,      help='Loss margin, only for some loss functions');
-parser.add_argument('--scale',          type=float, default=15,     help='Loss scale, only for some loss functions');
+parser.add_argument('--margin',         type=float, default=0.1,    help='Loss margin, only for some loss functions');
+parser.add_argument('--scale',          type=float, default=30,     help='Loss scale, only for some loss functions');
 parser.add_argument('--nPerSpeaker',    type=int,   default=1,      help='Number of utterances per speaker per batch, only for metric learning based losses');
 parser.add_argument('--nClasses',       type=int,   default=5994,   help='Number of speakers in the softmax layer, only for softmax-based losses');
 
 ## Load and save
 parser.add_argument('--initial_model',  type=str,   default="",     help='Initial model weights');
-parser.add_argument('--save_path',      type=str,   default="./data/exp1", help='Path for model and logs');
+parser.add_argument('--save_path',      type=str,   default="exps/exp1", help='Path for model and logs');
 
 ## Training and test data
-parser.add_argument('--train_list',     type=str,   default="",     help='Train list');
-parser.add_argument('--test_list',      type=str,   default="",     help='Evaluation list');
+parser.add_argument('--train_list',     type=str,   default="data/train_list.txt",  help='Train list');
+parser.add_argument('--test_list',      type=str,   default="data/test_list.txt",   help='Evaluation list');
 parser.add_argument('--train_path',     type=str,   default="data/voxceleb2", help='Absolute path to the train set');
 parser.add_argument('--test_path',      type=str,   default="data/voxceleb1", help='Absolute path to the test set');
 parser.add_argument('--musan_path',     type=str,   default="data/musan_split", help='Absolute path to the test set');
@@ -63,7 +71,12 @@ parser.add_argument('--encoder_type',   type=str,   default="SAP",  help='Type o
 parser.add_argument('--nOut',           type=int,   default=512,    help='Embedding size in the last FC layer');
 
 ## For test only
-parser.add_argument('--eval', dest='eval', action='store_true', help='Eval only')
+parser.add_argument('--eval',           dest='eval', action='store_true', help='Eval only')
+
+## Distributed and mixed precision training
+parser.add_argument('--port',           type=str,   default="8888", help='Port for distributed training, input as text');
+parser.add_argument('--distributed',    dest='distributed', action='store_true', help='Enable distributed training')
+parser.add_argument('--mixedprec',      dest='mixedprec',   action='store_true', help='Enable mixed precision training')
 
 args = parser.parse_args();
 
@@ -84,118 +97,152 @@ if args.config is not None:
         else:
             sys.stderr.write("Ignored unknown parameter {} in yaml.\n".format(k))
 
-## Initialise directories
-model_save_path     = args.save_path+"/model"
-result_save_path    = args.save_path+"/result"
 
-if not(os.path.exists(model_save_path)):
-    os.makedirs(model_save_path)
-        
-if not(os.path.exists(result_save_path)):
-    os.makedirs(result_save_path)
+# ## ===== ===== ===== ===== ===== ===== ===== =====
+# ## Trainer script
+# ## ===== ===== ===== ===== ===== ===== ===== =====
 
-## Load models
-s = SpeakerNet(**vars(args));
+def main_worker(gpu, ngpus_per_node, args):
 
-it          = 1;
-prevloss    = float("inf");
-sumloss     = 0;
-min_eer     = [100];
+    args.gpu = gpu
 
-## Load model weights
-modelfiles = glob.glob('%s/model0*.model'%model_save_path)
-modelfiles.sort()
+    ## Load models
+    s = SpeakerNet(**vars(args));
 
-if len(modelfiles) >= 1:
-    s.loadParameters(modelfiles[-1]);
-    print("Model %s loaded from previous state!"%modelfiles[-1]);
-    it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
-elif(args.initial_model != ""):
-    s.loadParameters(args.initial_model);
-    print("Model %s loaded!"%args.initial_model);
+    if args.distributed:
+        os.environ['MASTER_ADDR']='localhost'
+        os.environ['MASTER_PORT']=args.port
 
-for ii in range(0,it-1):
-    s.__scheduler__.step()
-        
-## Evaluation code
-if args.eval == True:
-        
-    sc, lab, trials = s.evaluateFromList(args.test_list, print_interval=100, test_path=args.test_path, eval_frames=args.eval_frames)
-    result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
-    print('EER %2.4f'%result[1])
+        dist.init_process_group(backend='nccl', world_size=ngpus_per_node, rank=args.gpu)
 
-    ## Save scores
-    print('Type desired file name to save scores. Otherwise, leave blank.')
-    userinp = input()
+        torch.cuda.set_device(args.gpu)
+        s.cuda(args.gpu)
 
-    while True:
-        if userinp == '':
-            quit();
-        elif os.path.exists(userinp) or '.' not in userinp:
-            print('Invalid file name %s. Try again.'%(userinp))
-            userinp = input()
-        else:
-            with open(userinp,'w') as outfile:
-                for vi, val in enumerate(sc):
-                    outfile.write('%.4f %s\n'%(val,trials[vi]))
-            quit();
+        s = torch.nn.parallel.DistributedDataParallel(s, device_ids=[args.gpu], find_unused_parameters=True)
 
-## Write args to scorefile
-scorefile = open(result_save_path+"/scores.txt", "a+");
-
-for items in vars(args):
-    print(items, vars(args)[items]);
-    scorefile.write('%s %s\n'%(items, vars(args)[items]));
-scorefile.flush()
-
-## Initialise data loader
-trainLoader = get_data_loader(args.train_list, **vars(args));
-
-while(1):   
-
-    clr = [x['lr'] for x in s.__optimizer__.param_groups]
-
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training %s with LR %f..."%(args.model,max(clr)));
-
-    ## Train network
-    loss, traineer = s.train_network(loader=trainLoader);
-
-    ## Validate and save
-    if it % args.test_interval == 0:
-
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Evaluating...");
-
-        sc, lab, _ = s.evaluateFromList(args.test_list, print_interval=100, test_path=args.test_path, eval_frames=args.eval_frames)
-        result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
-
-        min_eer.append(result[1])
-
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/TAcc %2.2f, TLOSS %f, VEER %2.4f, MINEER %2.4f"%( max(clr), traineer, loss, result[1], min(min_eer)));
-        scorefile.write("IT %d, LR %f, TEER/TAcc %2.2f, TLOSS %f, VEER %2.4f, MINEER %2.4f\n"%(it, max(clr), traineer, loss, result[1], min(min_eer)));
-
-        scorefile.flush()
-
-        s.saveParameters(model_save_path+"/model%09d.model"%it);
-        
-        with open(model_save_path+"/model%09d.eer"%it, 'w') as eerfile:
-            eerfile.write('%.4f'%result[1])
+        print('Loaded the model on GPU %d'%args.gpu)
 
     else:
+        s = WrappedModel(s).cuda(args.gpu)
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "LR %f, TEER/TAcc %2.2f, TLOSS %f"%( max(clr), traineer, loss));
-        scorefile.write("IT %d, LR %f, TEER/TAcc %2.2f, TLOSS %f\n"%(it, max(clr), traineer, loss));
+    it          = 1
+
+    ## Write args to scorefile
+    scorefile   = open(args.result_save_path+"/scores.txt", "a+");
+
+    ## Initialise trainer and data loader
+    trainLoader = get_data_loader(args.train_list, **vars(args));
+    trainer     = ModelTrainer(s, **vars(args))
+
+    ## Load model weights
+    modelfiles = glob.glob('%s/model0*.model'%args.model_save_path)
+    modelfiles.sort()
+
+    if len(modelfiles) >= 1:
+        trainer.loadParameters(modelfiles[-1]);
+        print("Model %s loaded from previous state!"%modelfiles[-1]);
+        it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
+    elif(args.initial_model != ""):
+        trainer.loadParameters(args.initial_model);
+        print("Model %s loaded!"%args.initial_model);
+
+    for ii in range(1,it):
+        trainer.__scheduler__.step()
+    
+    ## Evaluation code - must run on single GPU
+    if args.eval == True:
+
+        pytorch_total_params = sum(p.numel() for p in s.module.__S__.parameters())
+
+        print('Total parameters: ',pytorch_total_params)
+        print('Test list',args.test_list)
+
+        assert args.distributed == False
+            
+        sc, lab, _ = trainer.evaluateFromList(**vars(args))
+        result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
+
+        p_target = 0.05
+        c_miss = 1
+        c_fa = 1
+
+        fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
+        mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa)
+
+        print('EER %2.4f MinDCF %.5f'%(result[1],mindcf))
+        quit();
+
+    ## Save training code and params
+    if args.gpu == 0:
+        pyfiles = glob.glob('./*.py')
+        strtime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+        zipf = zipfile.ZipFile(args.result_save_path+ '/run%s.zip'%strtime, 'w', zipfile.ZIP_DEFLATED)
+        for file in pyfiles:
+            zipf.write(file)
+        zipf.close()
+
+        with open(args.result_save_path + '/run%s.cmd'%strtime, 'w') as f:
+            f.write('%s'%args)
+
+    ## Core training script
+    for it in range(it,args.max_epoch+1):
+
+        clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
+
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training epoch %d on GPU %d with LR %f "%(it,args.gpu,max(clr)));
+
+        loss, traineer = trainer.train_network(trainLoader, verbose=(args.gpu == 0));
+
+        if it % args.test_interval == 0 and args.gpu == 0:
+
+            ## Perform evaluation only in single GPU training
+            if not args.distributed:
+                sc, lab, _ = trainer.evaluateFromList(**vars(args))
+                result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
+
+                print("IT %d, VEER %2.4f"%(it, result[1]));
+                scorefile.write("IT %d, VEER %2.4f\n"%(it, result[1]));
+
+            trainer.saveParameters(args.model_save_path+"/model%09d.model"%it);
+
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), "TEER/TAcc %2.2f, TLOSS %f"%( traineer, loss));
+        scorefile.write("IT %d, TEER/TAcc %2.2f, TLOSS %f\n"%(it, traineer, loss));
 
         scorefile.flush()
 
-    if it >= args.max_epoch:
-        quit();
-
-    it+=1;
-    print("");
-
-scorefile.close();
+    scorefile.close();
 
 
+# ## ===== ===== ===== ===== ===== ===== ===== =====
+# ## Main function
+# ## ===== ===== ===== ===== ===== ===== ===== =====
 
 
+def main():
 
+    args.model_save_path     = args.save_path+"/model"
+    args.result_save_path    = args.save_path+"/result"
+    args.feat_save_path      = ""
+
+    if not(os.path.exists(args.model_save_path)):
+        os.makedirs(args.model_save_path)
+            
+    if not(os.path.exists(args.result_save_path)):
+        os.makedirs(args.result_save_path)
+
+    n_gpus = torch.cuda.device_count()
+
+    print('Python Version:', sys.version)
+    print('PyTorch Version:', torch.__version__)
+    print('Number of GPUs:', torch.cuda.device_count())
+    print('Save path:',args.save_path)
+
+    if args.distributed:
+        mp.spawn(main_worker, nprocs=n_gpus, args=(n_gpus, args))
+    else:
+        main_worker(0, None, args)
+
+
+if __name__ == '__main__':
+    main()

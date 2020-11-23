@@ -22,6 +22,6 @@ class LossFunction(nn.Module):
 
 		x 		= self.fc(x)
 		nloss   = self.criterion(x, label)
-		prec1, _ = accuracy(x.detach().cpu(), label.detach().cpu(), topk=(1, 5))
+		prec1	= accuracy(x.detach(), label.detach(), topk=(1,))[0]
 
 		return nloss, prec1

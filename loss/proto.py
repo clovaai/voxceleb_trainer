@@ -28,9 +28,9 @@ class LossFunction(nn.Module):
         out_positive    = x[:,0,:]
         stepsize        = out_anchor.size()[0]
 
-        output      = -1 * (F.pairwise_distance(out_positive.unsqueeze(-1),out_anchor.unsqueeze(-1).transpose(0,2))**2)
-        label       = torch.from_numpy(numpy.asarray(range(0,stepsize))).cuda()
-        nloss       = self.criterion(output, label)
-        prec1, _    = accuracy(output.detach().cpu(), label.detach().cpu(), topk=(1, 5))
+        output  = -1 * (F.pairwise_distance(out_positive.unsqueeze(-1),out_anchor.unsqueeze(-1).transpose(0,2))**2)
+        label   = torch.from_numpy(numpy.asarray(range(0,stepsize))).cuda()
+        nloss   = self.criterion(output, label)
+        prec1   = accuracy(output.detach(), label.detach(), topk=(1,))[0]
 
         return nloss, prec1

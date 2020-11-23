@@ -92,7 +92,6 @@ class AugmentWAV(object):
 
         return numpy.sum(numpy.concatenate(noises,axis=0),axis=0,keepdims=True) + audio
 
-
     def reverberate(self, audio):
 
         rir_file    = random.choice(self.rir_files)
@@ -102,18 +101,6 @@ class AugmentWAV(object):
         rir         = rir / numpy.sqrt(numpy.sum(rir**2))
 
         return signal.convolve(audio, rir, mode='full')[:,:self.max_audio]
-
-    def speed_up(self, audio):
-
-        audio = audio[0].astype(numpy.int16)
-
-        return numpy.expand_dims(self.speedup.build_array(input_array=audio, sample_rate_in=16000),0).astype(numpy.float)[:,:self.max_audio]
-
-    def slow_down(self, audio):
-
-        audio = audio[0].astype(numpy.int16)
-
-        return numpy.expand_dims(self.slowdown.build_array(input_array=audio, sample_rate_in=16000),0).astype(numpy.float)[:,:self.max_audio]
 
 
 class voxceleb_loader(Dataset):
@@ -182,6 +169,22 @@ class voxceleb_loader(Dataset):
         return len(self.data_list)
 
 
+
+class test_dataset_loader(Dataset):
+    def __init__(self, test_list, test_path, eval_frames, num_eval, **kwargs):
+        self.max_frames = eval_frames;
+        self.num_eval   = num_eval
+        self.test_path  = test_path
+        self.test_list  = test_list
+
+    def __getitem__(self, index):
+        audio = loadWAV(os.path.join(self.test_path,self.test_list[index]), self.max_frames, evalmode=True, num_eval=self.num_eval)
+        return torch.FloatTensor(audio), self.test_list[index]
+
+    def __len__(self):
+        return len(self.test_list)
+
+
 class voxceleb_sampler(torch.utils.data.Sampler):
     def __init__(self, data_source, nPerSpeaker, max_seg_per_spk, batch_size):
 
@@ -226,7 +229,6 @@ class voxceleb_sampler(torch.utils.data.Sampler):
     
     def __len__(self):
         return len(self.data_source)
-
 
 
 def get_data_loader(dataset_file_name, batch_size, augment, musan_path, rir_path, max_frames, max_seg_per_spk, nDataLoaderThread, nPerSpeaker, train_path, **kwargs):
