@@ -72,6 +72,7 @@ Angular Prototypical (angleproto)
 ResNetSE34L (SAP, ASP)
 ResNetSE34V2 (SAP, ASP)
 VGGVox40 (SAP, TAP, MAX)
+Res2NetSE34 (SAP, ASP)
 ```
 
 ### Data augmentation
