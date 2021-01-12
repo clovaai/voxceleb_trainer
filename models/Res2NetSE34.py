@@ -94,7 +94,7 @@ class Res2NetSE(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = x.reshape(x.sixe()[0], -1, x.size()[-1])
+        x = x.reshape(x.size()[0], -1, x.size()[-1])
 
         w = self.attention(x)
 
