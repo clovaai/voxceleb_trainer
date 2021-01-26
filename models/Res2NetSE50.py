@@ -19,6 +19,8 @@ class Res2NetSE(nn.Module):
         self.encoder_type = encoder_type
         self.n_mels = n_mels
         self.log_input = log_input
+        self.baseWidth = baseWidth
+        self.scale = scale
 
         self.conv1 = nn.Conv2d(1, num_filters[0], kernel_size=3, stride=1, padding=1)
         self.relu = nn.ReLU(inplace=True)
