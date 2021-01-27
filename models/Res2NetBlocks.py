@@ -33,7 +33,11 @@ class SEBottle2neck(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.se = SELayer(planes * self.expansion, reduction)
         self.downsample = downsample
+
         self.stride = stride
+        self.width = width
+        self.scale = scale
+        self.stype = stype
 
     def forward(self, x):
         residual = x
