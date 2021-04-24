@@ -11,13 +11,13 @@ import zipfile
 import datetime
 from tuneThreshold import *
 from SpeakerNet import *
-from DatasetLoader import get_data_loader
+from DatasetLoader import *
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-# ## ===== ===== ===== ===== ===== ===== ===== =====
-# ## Parse arguments
-# ## ===== ===== ===== ===== ===== ===== ===== =====
+## ===== ===== ===== ===== ===== ===== ===== =====
+## Parse arguments
+## ===== ===== ===== ===== ===== ===== ===== =====
 
 parser = argparse.ArgumentParser(description = "SpeakerNet");
 
@@ -30,6 +30,7 @@ parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch 
 parser.add_argument('--max_seg_per_spk', type=int,  default=500,    help='Maximum number of utterances per speaker per epoch');
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads');
 parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
+parser.add_argument('--seed',           type=int,   default=10,     help='Seed for the random number generator');
 
 ## Training details
 parser.add_argument('--test_interval',  type=int,   default=10,     help='Test and save every [test_interval] epochs');
@@ -98,9 +99,18 @@ if args.config is not None:
             sys.stderr.write("Ignored unknown parameter {} in yaml.\n".format(k))
 
 
-# ## ===== ===== ===== ===== ===== ===== ===== =====
-# ## Trainer script
-# ## ===== ===== ===== ===== ===== ===== ===== =====
+## Try to import NSML
+try:
+    import nsml
+    from nsml import HAS_DATASET, DATASET_PATH, PARALLEL_WORLD, PARALLEL_PORTS, MY_RANK
+    from nsml import NSML_NFS_OUTPUT, SESSION_NAME
+except:
+    pass;
+
+
+## ===== ===== ===== ===== ===== ===== ===== =====
+## Trainer script
+## ===== ===== ===== ===== ===== ===== ===== =====
 
 def main_worker(gpu, ngpus_per_node, args):
 
@@ -120,18 +130,32 @@ def main_worker(gpu, ngpus_per_node, args):
 
         s = torch.nn.parallel.DistributedDataParallel(s, device_ids=[args.gpu], find_unused_parameters=True)
 
-        print('Loaded the model on GPU %d'%args.gpu)
+        print('Loaded the model on GPU {:d}'.format(args.gpu))
 
     else:
         s = WrappedModel(s).cuda(args.gpu)
 
-    it          = 1
+    it = 1
 
     ## Write args to scorefile
     scorefile   = open(args.result_save_path+"/scores.txt", "a+");
 
     ## Initialise trainer and data loader
-    trainLoader = get_data_loader(args.train_list, **vars(args));
+    train_dataset = train_dataset_loader(**vars(args))
+
+    train_sampler = train_dataset_sampler(train_dataset, **vars(args))
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.nDataLoaderThread,
+        sampler=train_sampler,
+        pin_memory=False,
+        worker_init_fn=worker_init_fn,
+        drop_last=True,
+    )
+
+    # trainLoader = get_data_loader(args.train_list, **vars(args));
     trainer     = ModelTrainer(s, **vars(args))
 
     ## Load model weights
@@ -140,11 +164,11 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if len(modelfiles) >= 1:
         trainer.loadParameters(modelfiles[-1]);
-        print("Model %s loaded from previous state!"%modelfiles[-1]);
+        print("Model {} loaded from previous state!".format(modelfiles[-1]));
         it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
     elif(args.initial_model != ""):
         trainer.loadParameters(args.initial_model);
-        print("Model %s loaded!"%args.initial_model);
+        print("Model {} loaded!".format(args.initial_model));
 
     for ii in range(1,it):
         trainer.__scheduler__.step()
@@ -169,7 +193,7 @@ def main_worker(gpu, ngpus_per_node, args):
         fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
         mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, p_target, c_miss, c_fa)
 
-        print('EER %2.4f MinDCF %.5f'%(result[1],mindcf))
+        print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "VEER {:2.4f}".format(result[1]), "VEER {:2.5f}".format(mindcf));
         quit();
 
     ## Save training code and params
@@ -188,11 +212,11 @@ def main_worker(gpu, ngpus_per_node, args):
     ## Core training script
     for it in range(it,args.max_epoch+1):
 
+        train_sampler.set_epoch(it)
+
         clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), it, "Training epoch %d on GPU %d with LR %f "%(it,args.gpu,max(clr)));
-
-        loss, traineer = trainer.train_network(trainLoader, verbose=(args.gpu == 0));
+        loss, traineer = trainer.train_network(train_loader, verbose=(args.gpu == 0));
 
         if it % args.test_interval == 0 and args.gpu == 0:
 
@@ -201,25 +225,38 @@ def main_worker(gpu, ngpus_per_node, args):
                 sc, lab, _ = trainer.evaluateFromList(**vars(args))
                 result = tuneThresholdfromScore(sc, lab, [1, 0.1]);
 
-                print("IT %d, VEER %2.4f"%(it, result[1]));
-                scorefile.write("IT %d, VEER %2.4f\n"%(it, result[1]));
+                print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, VEER {:2.4f}".format(it, result[1]));
+                scorefile.write("Epoch {:d}, VEER {:2.4f}\n".format(it, result[1]));
 
             trainer.saveParameters(args.model_save_path+"/model%09d.model"%it);
 
-        print(time.strftime("%Y-%m-%d %H:%M:%S"), "TEER/TAcc %2.2f, TLOSS %f"%( traineer, loss));
-        scorefile.write("IT %d, TEER/TAcc %2.2f, TLOSS %f\n"%(it, traineer, loss));
+        if args.gpu == 0:
+            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f}".format(it, traineer, loss, max(clr)));
+            scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)));
 
         scorefile.flush()
+
+        if ("nsml" in sys.modules) and args.gpu == 0:
+            training_report = {};
+            training_report["summary"] = True;
+            training_report["epoch"] = it;
+            training_report["step"] = it;
+            training_report["train_loss"] = loss;
+
+            nsml.report(**training_report);
 
     scorefile.close();
 
 
-# ## ===== ===== ===== ===== ===== ===== ===== =====
-# ## Main function
-# ## ===== ===== ===== ===== ===== ===== ===== =====
+## ===== ===== ===== ===== ===== ===== ===== =====
+## Main function
+## ===== ===== ===== ===== ===== ===== ===== =====
 
 
 def main():
+
+    if ("nsml" in sys.modules):
+        args.save_path  = os.path.join(args.save_path,SESSION_NAME.replace('/','_'))
 
     args.model_save_path     = args.save_path+"/model"
     args.result_save_path    = args.save_path+"/result"

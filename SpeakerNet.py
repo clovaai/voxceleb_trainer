@@ -86,7 +86,7 @@ class ModelTrainer(object):
         counter = 0;
         index   = 0;
         loss    = 0;
-        top1    = 0     # EER or accuracy
+        top1    = 0;    # EER or accuracy
 
         tstart = time.time()
         
@@ -110,8 +110,8 @@ class ModelTrainer(object):
                 self.__optimizer__.step();
 
 
-            loss    += nloss.detach().cpu();
-            top1    += prec1.detach().cpu()
+            loss    += nloss.detach().cpu().item();
+            top1    += prec1.detach().cpu().item();
             counter += 1;
             index   += stepsize;
 
@@ -121,15 +121,13 @@ class ModelTrainer(object):
             tstart = time.time()
 
             if verbose:
-                sys.stdout.write("\rProcessing (%d) "%(index));
-                sys.stdout.write("Loss %f TEER/TAcc %2.3f%% - %.2f Hz "%(loss/counter, top1/counter, stepsize/telapsed));
+                sys.stdout.write("\rProcessing ({:d}) ".format(index));
+                sys.stdout.write("Loss {:f} TEER/TAcc {:2.3f}% - {:.2f} Hz ".format(loss/counter, top1/counter, stepsize/telapsed));
                 sys.stdout.flush();
 
             if self.lr_step == 'iteration': self.__scheduler__.step()
 
         if self.lr_step == 'epoch': self.__scheduler__.step()
-
-        sys.stdout.write("\n");
         
         return (loss/counter, top1/counter);
 
@@ -174,7 +172,7 @@ class ModelTrainer(object):
             telapsed            = time.time() - tstart
 
             if idx % print_interval == 0:
-                sys.stdout.write("\rReading %d of %d: %.2f Hz, embedding size %d"%(idx,len(setfiles),idx/telapsed,ref_feat.size()[1]));
+                sys.stdout.write("\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(idx,len(setfiles),idx/telapsed,ref_feat.size()[1]));
 
         print('')
         all_scores = [];
@@ -207,10 +205,8 @@ class ModelTrainer(object):
 
             if idx % print_interval == 0:
                 telapsed = time.time() - tstart
-                sys.stdout.write("\rComputing %d of %d: %.2f Hz"%(idx,len(lines),idx/telapsed));
+                sys.stdout.write("\rComputing {:d} of {:d}: {:.2f} Hz".format(idx,len(lines),idx/telapsed));
                 sys.stdout.flush();
-
-        print('')
 
         return (all_scores, all_labels, all_trials);
 
@@ -238,11 +234,11 @@ class ModelTrainer(object):
                 name = name.replace("module.", "");
 
                 if name not in self_state:
-                    print("%s is not in the model."%origname);
+                    print("{} is not in the model.".format(origname));
                     continue;
 
             if self_state[name].size() != loaded_state[origname].size():
-                print("Wrong parameter length: %s, model: %s, loaded: %s"%(origname, self_state[name].size(), loaded_state[origname].size()));
+                print("Wrong parameter length: {}, model: {}, loaded: {}".format(origname, self_state[name].size(), loaded_state[origname].size()));
                 continue;
 
             self_state[name].copy_(param);
