@@ -94,8 +94,6 @@ You can add new models and loss functions to `models` and `loss` directories res
 
   - If you are running more than one distributed training session, you need to change the port.
 
-  - At every epoch, the whole dataset is passed through **each** GPU once. Therefore `test_interval` and `max_epochs` must be divided by the number of GPUs for the same number of forward passes as single GPU training.
-
 ### Data
 
 The [VoxCeleb](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/) datasets are used for these experiments.
