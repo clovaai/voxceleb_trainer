@@ -3,6 +3,8 @@
 *.wav
 *.mp4
 *.pcm
+*.yaml
+data
 data/
 exps/
 core.*
