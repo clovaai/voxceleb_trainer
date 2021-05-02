@@ -149,7 +149,7 @@ class train_dataset_loader(Dataset):
             if self.augment:
                 augtype = random.randint(0,4)
                 if augtype == 1:
-                    audio     = self.augment_wav.reverberate(audio)
+                    audio   = self.augment_wav.reverberate(audio)
                 elif augtype == 2:
                     audio   = self.augment_wav.additive_noise('music',audio)
                 elif augtype == 3:
@@ -192,7 +192,7 @@ class train_dataset_sampler(torch.utils.data.Sampler):
         self.batch_size         = batch_size;
         self.epoch              = 0;
         self.seed               = seed;
-        self.distributed        = distributed
+        self.distributed        = distributed;
         
     def __iter__(self):
 
@@ -235,7 +235,7 @@ class train_dataset_sampler(torch.utils.data.Sampler):
 
         ## Prevent two pairs of the same speaker in the same batch
         for ii in mixid:
-            startbatch = len(mixlabel) - len(mixlabel) % self.batch_size
+            startbatch = round_down(len(mixlabel), self.batch_size)
             if flattened_label[ii] not in mixlabel[startbatch:]:
                 mixlabel.append(flattened_label[ii])
                 mixmap.append(ii)
@@ -244,17 +244,19 @@ class train_dataset_sampler(torch.utils.data.Sampler):
 
         ## Divide data to each GPU
         if self.distributed:
-            total_size  = len(mixed_list) - len(mixed_list) % (self.batch_size * dist.get_world_size())
+            total_size  = round_down(len(mixed_list), self.batch_size * dist.get_world_size()) 
             start_index = int ( ( dist.get_rank()     ) / dist.get_world_size() * total_size )
             end_index   = int ( ( dist.get_rank() + 1 ) / dist.get_world_size() * total_size )
+            self.num_samples = end_index - start_index
             return iter(mixed_list[start_index:end_index])
         else:
-            total_size = len(mixed_list) - len(mixed_list) % self.batch_size
+            total_size = round_down(len(mixed_list), self.batch_size)
+            self.num_samples = total_size
             return iter(mixed_list[:total_size])
 
     
-    def __len__(self):
-        return len(self.data_source)
+    def __len__(self) -> int:
+        return self.num_samples
 
     def set_epoch(self, epoch: int) -> None:
         self.epoch = epoch

@@ -88,11 +88,9 @@ You can add new models and loss functions to `models` and `loss` directories res
 
 - Use `--distributed` flag to enable distributed training.
 
-  - GPU indices should be set using the command `export CUDA_VISIBLE_DEVICES=0,1,2,3`.
+  - GPU indices should be set before training using the command `export CUDA_VISIBLE_DEVICES=0,1,2,3`.
 
-  - Evaluation is not performed between epochs during training.
-
-  - If you are running more than one distributed training session, you need to change the port.
+  - If you are running more than one distributed training session, you need to change the `--port` argument.
 
 ### Data
 

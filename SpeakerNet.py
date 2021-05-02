@@ -6,9 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy, math, pdb, sys, random
 import time, os, itertools, shutil, importlib
+
 from tuneThreshold import tuneThresholdfromScore
 from DatasetLoader import test_dataset_loader
-
 from torch.cuda.amp import autocast, GradScaler
 
 class WrappedModel(nn.Module):
@@ -115,13 +115,11 @@ class ModelTrainer(object):
             counter += 1;
             index   += stepsize;
 
-        
-
             telapsed = time.time() - tstart
             tstart = time.time()
 
             if verbose:
-                sys.stdout.write("\rProcessing ({:d}) ".format(index));
+                sys.stdout.write("\rProcessing {:d} of {:d}:".format(index, loader.__len__()*loader.batch_size));
                 sys.stdout.write("Loss {:f} TEER/TAcc {:2.3f}% - {:.2f} Hz ".format(loss/counter, top1/counter, stepsize/telapsed));
                 sys.stdout.flush();
 
@@ -136,7 +134,12 @@ class ModelTrainer(object):
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, print_interval=100, num_eval=10, **kwargs):
+    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, distributed, print_interval=100, num_eval=10, **kwargs):
+
+        if distributed:
+            rank = torch.distributed.get_rank()
+        else:
+            rank = 0
         
         self.__model__.eval();
         
@@ -150,63 +153,85 @@ class ModelTrainer(object):
             lines = f.readlines()
 
         ## Get a list of unique file names
-        files = sum([x.strip().split()[-2:] for x in lines],[])
+        files = list(itertools.chain(*[x.strip().split()[-2:] for x in lines]))
         setfiles = list(set(files))
         setfiles.sort()
 
         ## Define test data loader
         test_dataset = test_dataset_loader(setfiles, test_path, num_eval=num_eval, **kwargs)
+
+        if distributed:
+            sampler = torch.utils.data.distributed.DistributedSampler(test_dataset, shuffle=False)
+        else:
+            sampler = None
+
         test_loader = torch.utils.data.DataLoader(
             test_dataset,
             batch_size=1,
             shuffle=False,
             num_workers=nDataLoaderThread,
             drop_last=False,
+            sampler=sampler
         )
 
         ## Extract features for every image
         for idx, data in enumerate(test_loader):
             inp1                = data[0][0].cuda()
-            ref_feat            = self.__model__(inp1).detach().cpu()
+            with torch.no_grad():
+                ref_feat            = self.__model__(inp1).detach().cpu()
             feats[data[1][0]]   = ref_feat
             telapsed            = time.time() - tstart
 
-            if idx % print_interval == 0:
-                sys.stdout.write("\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(idx,len(setfiles),idx/telapsed,ref_feat.size()[1]));
+            if idx % print_interval == 0 and rank == 0:
+                sys.stdout.write("\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(idx,test_loader.__len__(),idx/telapsed,ref_feat.size()[1]));
 
-        print('')
         all_scores = [];
         all_labels = [];
         all_trials = [];
-        tstart = time.time()
 
-        ## Read files and compute all scores
-        for idx, line in enumerate(lines):
+        if distributed:
+            ## Gather features from all GPUs
+            feats_all = [None for _ in range(0,torch.distributed.get_world_size())]
+            torch.distributed.all_gather_object(feats_all, feats)
 
-            data = line.split();
+        if rank == 0:
 
-            ## Append random label if missing
-            if len(data) == 2: data = [random.randint(0,1)] + data
+            tstart = time.time()
+            print('')
 
-            ref_feat = feats[data[1]].cuda()
-            com_feat = feats[data[2]].cuda()
+            ## Combine gathered features
+            if distributed:
+                feats = feats_all[0]
+                for feats_batch in feats_all[1:]:
+                    feats.update(feats_batch)
 
-            if self.__model__.module.__L__.test_normalize:
-                ref_feat = F.normalize(ref_feat, p=2, dim=1)
-                com_feat = F.normalize(com_feat, p=2, dim=1)
+            ## Read files and compute all scores
+            for idx, line in enumerate(lines):
 
-            dist = F.pairwise_distance(ref_feat.unsqueeze(-1), com_feat.unsqueeze(-1).transpose(0,2)).detach().cpu().numpy();
+                data = line.split();
 
-            score = -1 * numpy.mean(dist);
+                ## Append random label if missing
+                if len(data) == 2: data = [random.randint(0,1)] + data
 
-            all_scores.append(score);  
-            all_labels.append(int(data[0]));
-            all_trials.append(data[1]+" "+data[2])
+                ref_feat = feats[data[1]].cuda()
+                com_feat = feats[data[2]].cuda()
 
-            if idx % print_interval == 0:
-                telapsed = time.time() - tstart
-                sys.stdout.write("\rComputing {:d} of {:d}: {:.2f} Hz".format(idx,len(lines),idx/telapsed));
-                sys.stdout.flush();
+                if self.__model__.module.__L__.test_normalize:
+                    ref_feat = F.normalize(ref_feat, p=2, dim=1)
+                    com_feat = F.normalize(com_feat, p=2, dim=1)
+
+                dist = F.pairwise_distance(ref_feat.unsqueeze(-1), com_feat.unsqueeze(-1).transpose(0,2)).detach().cpu().numpy();
+
+                score = -1 * numpy.mean(dist);
+
+                all_scores.append(score);  
+                all_labels.append(int(data[0]));
+                all_trials.append(data[1]+" "+data[2])
+
+                if idx % print_interval == 0:
+                    telapsed = time.time() - tstart
+                    sys.stdout.write("\rComputing {:d} of {:d}: {:.2f} Hz".format(idx,len(lines),idx/telapsed));
+                    sys.stdout.flush();
 
         return (all_scores, all_labels, all_trials);
 
