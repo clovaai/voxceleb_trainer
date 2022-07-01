@@ -246,6 +246,17 @@ class ModelTrainer(object):
 
         self_state = self.__model__.module.state_dict()
         loaded_state = torch.load(path, map_location="cuda:%d" % self.gpu)
+        if len(loaded_state.keys()) == 1 and "model" in loaded_state:
+            loaded_state = loaded_state["model"]
+            newdict = {}
+            delete_list = []
+            for name, param in loaded_state.items():
+                new_name = "__S__."+name
+                newdict[new_name] = param
+                delete_list.append(name)
+            loaded_state.update(newdict)
+            for name in delete_list:
+                del loaded_state[name]
         for name, param in loaded_state.items():
             origname = name
             if name not in self_state:
