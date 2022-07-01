@@ -1,6 +1,6 @@
 # VoxCeleb trainer
 
-This repository contains the framework for training speaker recognition models described in the paper '_In defence of metric learning for speaker recognition_'.
+This repository contains the framework for training speaker recognition models described in the paper '_In defence of metric learning for speaker recognition_' and '_Pushing the limits of raw waveform speaker recognition_'.
 
 ### Dependencies
 ```
@@ -26,17 +26,23 @@ In addition to the Python dependencies, `wget` and `ffmpeg` must be installed on
 
 ### Training examples
 
-- AM-Softmax:
+- ResNetSE34L with AM-Softmax:
 ```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc amsoftmax --save_path exps/exp1 --nClasses 5994 --batch_size 200 --scale 30 --margin 0.3
-```
-
-- Angular prototypical:
-```
-python ./trainSpeakerNet.py --model ResNetSE34L --log_input True --encoder_type SAP --trainfunc angleproto --save_path exps/exp2 --nPerSpeaker 2 --batch_size 200
+python ./trainSpeakerNet.py --config ./configs/ResNetSE34L_AM.yaml
 ```
 
-The arguments can also be passed as `--config path_to_config.yaml`. Note that the configuration file overrides the arguments passed via command line.
+- RawNet3 with AAM-Softmax
+```
+python ./trainSpeakerNet.py --config ./configs/RawNet3_AAM.yaml
+```
+
+- ResNetSE34L with Angular prototypical:
+```
+python ./trainSpeakerNet.py --config ./configs/ResNetSE34L_AP.yaml
+```
+
+You can pass individual arguments that are defined in trainSpeakerNet.py by `--{ARG_NAME} {VALUE}`.
+Note that the configuration file overrides the arguments passed via command line.
 
 ### Pretrained models
 
@@ -55,6 +61,13 @@ The following script should return: `EER 1.1771`.
 ```
 python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_ap.model
 ```
+
+Pretrained RawNet3, described in [3], can be downloaded via `git submodule update --init --recursive`.
+```
+python ./trainSpeakerNet.py --eval --config ./configs/RawNet3.yaml --initial_model RawNet3/model.pt 
+```
+
+The following script should return `EER 0.8932`.
 
 ### Implemented loss functions
 ```
@@ -132,7 +145,7 @@ Please cite [1] if you make use of the code. Please see [here](References.md) fo
 @inproceedings{chung2020in,
   title={In defence of metric learning for speaker recognition},
   author={Chung, Joon Son and Huh, Jaesung and Mun, Seongkyu and Lee, Minjae and Heo, Hee Soo and Choe, Soyeon and Ham, Chiheon and Jung, Sunghwan and Lee, Bong-Jin and Han, Icksang},
-  booktitle={Interspeech},
+  booktitle={Proc. Interspeech},
   year={2020}
 }
 ```
@@ -144,6 +157,16 @@ Please cite [1] if you make use of the code. Please see [here](References.md) fo
   author={Heo, Hee Soo and Lee, Bong-Jin and Huh, Jaesung and Chung, Joon Son},
   journal={arXiv preprint arXiv:2009.14153},
   year={2020}
+}
+```
+
+[3] _Pushing the limits of raw waveform speaker recognition_
+```
+@article{jung2022pushing,
+  title={Pushing the limits of raw waveform speaker recognition},
+  author={Jung, Jee-weon and Kim, You Jin and Heo, Hee-Soo and Lee, Bong-Jin and Kwon, Youngki and Chung, Joon Son},
+  journal={Proc. Interspeech},
+  year={2022}
 }
 ```
 
