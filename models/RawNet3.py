@@ -139,6 +139,6 @@ class RawNet3(nn.Module):
 def MainModel(**kwargs):
 
     model = RawNet3(
-        Bottle2neck, model_scale=8, context=True, summed=True, **kwargs
+        Bottle2neck, model_scale=8, context=True, summed=True, out_bn=False, log_sinc=True, norm_sinc="mean", grad_mult=1, **kwargs
     )
     return model
