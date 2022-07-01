@@ -118,11 +118,7 @@ class ModelTrainer(object):
 
             if verbose:
                 sys.stdout.write("\rProcessing {:d} of {:d}:".format(index, loader.__len__() * loader.batch_size))
-                sys.stdout.write(
-                    "Loss {:f} TEER/TAcc {:2.3f}% - {:.2f} Hz ".format(
-                        loss / counter, top1 / counter, stepsize / telapsed
-                    )
-                )
+                sys.stdout.write("Loss {:f} TEER/TAcc {:2.3f}% - {:.2f} Hz ".format(loss / counter, top1 / counter, stepsize / telapsed))
                 sys.stdout.flush()
 
             if self.lr_step == "iteration":
@@ -137,9 +133,7 @@ class ModelTrainer(object):
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromList(
-        self, test_list, test_path, nDataLoaderThread, distributed, print_interval=100, num_eval=10, **kwargs
-    ):
+    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, distributed, print_interval=100, num_eval=10, **kwargs):
 
         if distributed:
             rank = torch.distributed.get_rank()
@@ -170,9 +164,7 @@ class ModelTrainer(object):
         else:
             sampler = None
 
-        test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=1, shuffle=False, num_workers=nDataLoaderThread, drop_last=False, sampler=sampler
-        )
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=nDataLoaderThread, drop_last=False, sampler=sampler)
 
         ## Extract features for every image
         for idx, data in enumerate(test_loader):
@@ -184,9 +176,7 @@ class ModelTrainer(object):
 
             if idx % print_interval == 0 and rank == 0:
                 sys.stdout.write(
-                    "\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(
-                        idx, test_loader.__len__(), idx / telapsed, ref_feat.size()[1]
-                    )
+                    "\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(idx, test_loader.__len__(), idx / telapsed, ref_feat.size()[1])
                 )
 
         all_scores = []
@@ -225,12 +215,7 @@ class ModelTrainer(object):
                     ref_feat = F.normalize(ref_feat, p=2, dim=1)
                     com_feat = F.normalize(com_feat, p=2, dim=1)
 
-                dist = (
-                    F.pairwise_distance(ref_feat.unsqueeze(-1), com_feat.unsqueeze(-1).transpose(0, 2))
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+                dist = torch.cdist(ref_feat.reshape(num_eval, -1), com_feat.reshape(num_eval, -1)).detach().cpu().numpy()
 
                 score = -1 * numpy.mean(dist)
 
@@ -271,11 +256,7 @@ class ModelTrainer(object):
                     continue
 
             if self_state[name].size() != loaded_state[origname].size():
-                print(
-                    "Wrong parameter length: {}, model: {}, loaded: {}".format(
-                        origname, self_state[name].size(), loaded_state[origname].size()
-                    )
-                )
+                print("Wrong parameter length: {}, model: {}, loaded: {}".format(origname, self_state[name].size(), loaded_state[origname].size()))
                 continue
 
             self_state[name].copy_(param)
