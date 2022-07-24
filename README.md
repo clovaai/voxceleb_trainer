@@ -150,13 +150,13 @@ Please cite [1] if you make use of the code. Please see [here](References.md) fo
 }
 ```
 
-[2] _Clova baseline system for the VoxCeleb Speaker Recognition Challenge 2020_
+[2] _The ins and outs of speaker recognition: lessons from VoxSRC 2020_
 ```
-@article{heo2020clova,
-  title={Clova baseline system for the {VoxCeleb} Speaker Recognition Challenge 2020},
-  author={Heo, Hee Soo and Lee, Bong-Jin and Huh, Jaesung and Chung, Joon Son},
-  journal={arXiv preprint arXiv:2009.14153},
-  year={2020}
+@article{kwon2021ins,
+  title={The ins and outs of speaker recognition: lessons from {VoxSRC} 2020},
+  author={Kwon, Yoohwan and Heo, Hee Soo and Lee, Bong-Jin and Chung, Joon Son},
+  booktitle={Proc. ICASSP},
+  year={2021}
 }
 ```
 
