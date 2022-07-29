@@ -152,7 +152,7 @@ Please cite [1] if you make use of the code. Please see [here](References.md) fo
 
 [2] _The ins and outs of speaker recognition: lessons from VoxSRC 2020_
 ```
-@article{kwon2021ins,
+@inproceedings{kwon2021ins,
   title={The ins and outs of speaker recognition: lessons from {VoxSRC} 2020},
   author={Kwon, Yoohwan and Heo, Hee Soo and Lee, Bong-Jin and Chung, Joon Son},
   booktitle={Proc. ICASSP},
@@ -162,10 +162,10 @@ Please cite [1] if you make use of the code. Please see [here](References.md) fo
 
 [3] _Pushing the limits of raw waveform speaker recognition_
 ```
-@article{jung2022pushing,
+@inproceedings{jung2022pushing,
   title={Pushing the limits of raw waveform speaker recognition},
   author={Jung, Jee-weon and Kim, You Jin and Heo, Hee-Soo and Lee, Bong-Jin and Kwon, Youngki and Chung, Joon Son},
-  journal={Proc. Interspeech},
+  booktitle={Proc. Interspeech},
   year={2022}
 }
 ```
