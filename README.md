@@ -54,20 +54,23 @@ You can check that the following script returns: `EER 2.1792`. You will be given
 python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 400 --initial_model baseline_lite_ap.model
 ```
 
-A larger model trained with online data augmentation, described in [2], can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model). 
+A larger model trained with online data augmentation, described in [2], can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_smproto.model). 
 
-The following script should return: `EER 1.1771`.
+The following script should return: `EER 1.0180`.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_smproto.model
 ```
 
 Pretrained RawNet3, described in [3], can be downloaded via `git submodule update --init --recursive`.
+
+The following script should return `EER 0.8932`.
+
 ```
 python ./trainSpeakerNet.py --eval --config ./configs/RawNet3.yaml --initial_model RawNet3/model.pt 
 ```
 
-The following script should return `EER 0.8932`.
+
 
 ### Implemented loss functions
 ```
@@ -115,8 +118,8 @@ id00000 id00000/youtube_key/12345.wav
 id00012 id00012/21Uxsk56VDQ/00001.wav
 ```
 
-The train list for VoxCeleb2 can be download from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/train_list.txt) and the
-test list for VoxCeleb1 from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/veri_test.txt).
+The train list for VoxCeleb2 can be download from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/train_list.txt). The
+test lists for VoxCeleb1 can be downloaded from [here](https://mm.kaist.ac.kr/datasets/voxceleb/index.html#testlist). 
 
 ### Replicating the results from the paper
 
