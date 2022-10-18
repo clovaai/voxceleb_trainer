@@ -1,6 +1,6 @@
 torch>=1.7.0
 torchaudio>=0.7.0
-asteroid_filterbank==0.4.0
+asteroid_filterbanks==0.4.0
 numpy
 scipy
 scikit-learn
