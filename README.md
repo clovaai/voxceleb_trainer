@@ -67,7 +67,7 @@ Pretrained RawNet3, described in [3], can be downloaded via `git submodule updat
 The following script should return `EER 0.8932`.
 
 ```
-python ./trainSpeakerNet.py --eval --config ./configs/RawNet3.yaml --initial_model RawNet3/model.pt 
+python ./trainSpeakerNet.py --eval --config ./configs/RawNet3_AAM.yaml --initial_model models/weights/RawNet3/model.pt
 ```
 
 
