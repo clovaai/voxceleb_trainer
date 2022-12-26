@@ -135,7 +135,7 @@ def part_extract(args, fname, target):
 ## ========== ===========
 def convert(args):
 
-    files     = glob.glob('%s/voxceleb2/*/*/*.m4a'%args.save_path)
+    files     = glob.glob('%s/voxceleb2/*/*/*/*.m4a'%args.save_path)
     files.sort()
 
     print('Converting files from AAC to WAV')
