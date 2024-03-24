@@ -10,6 +10,7 @@ import threading
 import time
 import math
 import glob
+import pathlib
 import soundfile
 from scipy import signal
 from scipy.io import wavfile
@@ -50,7 +51,7 @@ def loadWAV(filename, max_frames, evalmode=True, num_eval=10):
         for asf in startframe:
             feats.append(audio[int(asf):int(asf)+max_audio])
 
-    feat = numpy.stack(feats,axis=0).astype(numpy.float)
+    feat = numpy.stack(feats,axis=0).astype(numpy.float64)
 
     return feat;
     
@@ -65,19 +66,25 @@ class AugmentWAV(object):
 
         self.noisesnr   = {'noise':[0,15],'speech':[13,20],'music':[5,15]}
         self.numnoise   = {'noise':[1,1], 'speech':[3,7],  'music':[1,1] }
+        # Something is wrong with this ... noice, speech, and music file names should be assigned here
         self.noiselist  = {}
 
-        augment_files   = glob.glob(os.path.join(musan_path,'*/*/*/*.wav'));
+        currWorkDir = os.getcwd()
+        musanPath = pathlib.Path(currWorkDir).joinpath(musan_path)
+        augmentFilesPaths   = list(musanPath.glob("**/*.wav"))
+        augment_files = [str(af) for af in augmentFilesPaths]
 
-        for file in augment_files:
-            if not file.split('/')[-4] in self.noiselist:
-                self.noiselist[file.split('/')[-4]] = []
-            self.noiselist[file.split('/')[-4]].append(file)
+        for file in augmentFilesPaths:
+            mainParent = str(file.parts[-3])
+            if mainParent not in self.noiselist.keys():
+                self.noiselist[mainParent] = []
+            self.noiselist[mainParent].append(str(file))
 
-        self.rir_files  = glob.glob(os.path.join(rir_path,'*/*/*.wav'));
+        rirPath = pathlib.Path(currWorkDir).joinpath(rir_path)
+        rirFilesPaths   = list(rirPath.glob("**/*.wav"))
+        self.rir_files  = [str(rf) for rf in rirFilesPaths]
 
     def additive_noise(self, noisecat, audio):
-
         clean_db = 10 * numpy.log10(numpy.mean(audio ** 2)+1e-4) 
 
         numnoise    = self.numnoise[noisecat]
@@ -99,7 +106,7 @@ class AugmentWAV(object):
         rir_file    = random.choice(self.rir_files)
         
         rir, fs     = soundfile.read(rir_file)
-        rir         = numpy.expand_dims(rir.astype(numpy.float),0)
+        rir         = numpy.expand_dims(rir.astype(numpy.float64),0)
         rir         = rir / numpy.sqrt(numpy.sum(rir**2))
 
         return signal.convolve(audio, rir, mode='full')[:,:self.max_audio]
@@ -178,6 +185,13 @@ class test_dataset_loader(Dataset):
     def __getitem__(self, index):
         audio = loadWAV(os.path.join(self.test_path,self.test_list[index]), self.max_frames, evalmode=True, num_eval=self.num_eval)
         return torch.FloatTensor(audio), self.test_list[index]
+
+    def __getitems__(self, indexList):
+        sampleList = []
+        for index in indexList:
+            sample = self.__getitem__(index)
+            sampleList.append(sample)
+        return sampleList
 
     def __len__(self):
         return len(self.test_list)

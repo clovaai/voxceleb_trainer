@@ -157,17 +157,23 @@ class ModelTrainer(object):
         setfiles.sort()
 
         ## Define test data loader
+        # print(f"  - {setfiles}")
+
         test_dataset = test_dataset_loader(setfiles, test_path, num_eval=num_eval, **kwargs)
 
         if distributed:
+            print(f"  - Evaluating in 'Distributed' mode ... ")
             sampler = torch.utils.data.distributed.DistributedSampler(test_dataset, shuffle=False)
         else:
+            print(f"  - Evaluating in 'Serial' mode ... ")
             sampler = None
 
+        print(f"  - No. Workers = {nDataLoaderThread}")
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=nDataLoaderThread, drop_last=False, sampler=sampler)
 
         ## Extract features for every image
-        for idx, data in enumerate(test_loader):
+        print(f"  - Extracting features ...")
+        for idx, data in enumerate(test_dataset):
             inp1 = data[0][0].cuda()
             with torch.no_grad():
                 ref_feat = self.__model__(inp1).detach().cpu()
