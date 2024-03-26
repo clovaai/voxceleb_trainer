@@ -236,7 +236,7 @@ def main_worker(gpu, ngpus_per_node, args):
             scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)))
 
         if it % args.test_interval == 0:
-
+            print(f" - Testing trained network every {args.test_interval} Epochs ...")
             sc, lab, _ = trainer.evaluateFromList(**vars(args))
 
             if args.gpu == 0:

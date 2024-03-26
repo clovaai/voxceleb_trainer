@@ -183,15 +183,16 @@ class test_dataset_loader(Dataset):
         self.test_list  = test_list
 
     def __getitem__(self, index):
-        audio = loadWAV(os.path.join(self.test_path,self.test_list[index]), self.max_frames, evalmode=True, num_eval=self.num_eval)
+        filePath = pathlib.Path(self.test_path).joinpath(self.test_list[index])
+        audio = loadWAV(str(filePath), self.max_frames, evalmode=True, num_eval=self.num_eval)
         return torch.FloatTensor(audio), self.test_list[index]
 
-    def __getitems__(self, indexList):
-        sampleList = []
-        for index in indexList:
-            sample = self.__getitem__(index)
-            sampleList.append(sample)
-        return sampleList
+    # def __getitems__(self, indexList):
+    #     sampleList = []
+    #     for index in indexList:
+    #         sample = self.__getitem__(index)
+    #         sampleList.append(sample)
+    #     return sampleList
 
     def __len__(self):
         return len(self.test_list)
