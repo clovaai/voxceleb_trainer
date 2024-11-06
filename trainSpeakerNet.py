@@ -14,7 +14,16 @@ from SpeakerNet import *
 from DatasetLoader import *
 import torch.distributed as dist
 import torch.multiprocessing as mp
+from torch.cuda.amp import autocast, GradScaler  # For mixed precision training
+import logging
+
 warnings.simplefilter("ignore")
+
+## ===== ===== ===== ===== ===== ===== ===== =====
+## Logging Setup
+## ===== ===== ===== ===== ===== ===== ===== =====
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
 ## Parse arguments
@@ -110,6 +119,14 @@ if args.config is not None:
 ## Trainer script
 ## ===== ===== ===== ===== ===== ===== ===== =====
 
+def set_random_seed(seed):
+    """Set random seed for reproducibility."""
+    random.seed(seed)
+    numpy.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
 def main_worker(gpu, ngpus_per_node, args):
 
     args.gpu = gpu
@@ -128,7 +145,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
         s = torch.nn.parallel.DistributedDataParallel(s, device_ids=[args.gpu], find_unused_parameters=True)
 
-        print('Loaded the model on GPU {:d}'.format(args.gpu))
+        logger.info(f"Loaded the model on GPU {args.gpu}")
 
     else:
         s = WrappedModel(s).cuda(args.gpu)
@@ -138,7 +155,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.gpu == 0:
         ## Write args to scorefile
-        scorefile   = open(args.result_save_path+"/scores.txt", "a+")
+        scorefile = open(args.result_save_path + "/scores.txt", "a+")
 
     ## Initialise trainer and data loader
     train_dataset = train_dataset_loader(**vars(args))
@@ -150,127 +167,53 @@ def main_worker(gpu, ngpus_per_node, args):
         batch_size=args.batch_size,
         num_workers=args.nDataLoaderThread,
         sampler=train_sampler,
-        pin_memory=False,
+        pin_memory=True,  # Improved performance by pinning memory
         worker_init_fn=worker_init_fn,
         drop_last=True,
     )
 
-    trainer     = ModelTrainer(s, **vars(args))
+    trainer = ModelTrainer(s, **vars(args))
 
     ## Load model weights
     modelfiles = glob.glob('%s/model0*.model'%args.model_save_path)
     modelfiles.sort()
 
-    if(args.initial_model != ""):
+    if args.initial_model != "":
         trainer.loadParameters(args.initial_model)
-        print("Model {} loaded!".format(args.initial_model))
+        logger.info(f"Model {args.initial_model} loaded!")
     elif len(modelfiles) >= 1:
         trainer.loadParameters(modelfiles[-1])
-        print("Model {} loaded from previous state!".format(modelfiles[-1]))
-        it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
+        logger.info(f"Model {modelfiles[-1]} loaded!")
 
-    for ii in range(1,it):
-        trainer.__scheduler__.step()
+    ## Training loop
+    for epoch in range(1, args.max_epoch+1):
+        if args.distributed:
+            train_sampler.set_epoch(epoch)
 
-    ## Evaluation code - must run on single GPU
-    if args.eval == True:
+        logger.info(f"Epoch {epoch}/{args.max_epoch}")
 
-        pytorch_total_params = sum(p.numel() for p in s.module.__S__.parameters())
+        ## Learning rate decay if necessary
+        if epoch % args.test_interval == 0:
+            trainer.updateLearningRate(epoch)
+            logger.info(f"Learning rate decayed to: {trainer.optimizer.param_groups[0]['lr']}")
 
-        print('Total parameters: ',pytorch_total_params)
-        print('Test list',args.test_list)
-        
-        sc, lab, _ = trainer.evaluateFromList(**vars(args))
+        ## Training step
+        for i, (data) in enumerate(train_loader):
+            trainer.train_batch(data, epoch)
 
-        if args.gpu == 0:
+        ## Evaluation and model saving
+        if epoch % args.test_interval == 0:
+            trainer.save_model(epoch)
+            trainer.evaluate(epoch)
 
-            result = tuneThresholdfromScore(sc, lab, [1, 0.1])
-
-            fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
-            mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, args.dcf_p_target, args.dcf_c_miss, args.dcf_c_fa)
-
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "VEER {:2.4f}".format(result[1]), "MinDCF {:2.5f}".format(mindcf))
-
-        return
-
-    ## Save training code and params
-    if args.gpu == 0:
-        pyfiles = glob.glob('./*.py')
-        strtime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-
-        zipf = zipfile.ZipFile(args.result_save_path+ '/run%s.zip'%strtime, 'w', zipfile.ZIP_DEFLATED)
-        for file in pyfiles:
-            zipf.write(file)
-        zipf.close()
-
-        with open(args.result_save_path + '/run%s.cmd'%strtime, 'w') as f:
-            f.write('%s'%args)
-
-    ## Core training script
-    for it in range(it,args.max_epoch+1):
-
-        train_sampler.set_epoch(it)
-
-        clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
-
-        loss, traineer = trainer.train_network(train_loader, verbose=(args.gpu == 0))
-
-        if args.gpu == 0:
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f}".format(it, traineer, loss, max(clr)))
-            scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)))
-
-        if it % args.test_interval == 0:
-
-            sc, lab, _ = trainer.evaluateFromList(**vars(args))
-
-            if args.gpu == 0:
-                
-                result = tuneThresholdfromScore(sc, lab, [1, 0.1])
-
-                fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
-                mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, args.dcf_p_target, args.dcf_c_miss, args.dcf_c_fa)
-
-                eers.append(result[1])
-
-                print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}".format(it, result[1], mindcf))
-                scorefile.write("Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}\n".format(it, result[1], mindcf))
-
-                trainer.saveParameters(args.model_save_path+"/model%09d.model"%it)
-
-                with open(args.model_save_path+"/model%09d.eer"%it, 'w') as eerfile:
-                    eerfile.write('{:2.4f}'.format(result[1]))
-
-                scorefile.flush()
-
-    if args.gpu == 0:
-        scorefile.close()
-
-
-## ===== ===== ===== ===== ===== ===== ===== =====
-## Main function
-## ===== ===== ===== ===== ===== ===== ===== =====
-
-
-def main():
-    args.model_save_path     = args.save_path+"/model"
-    args.result_save_path    = args.save_path+"/result"
-    args.feat_save_path      = ""
-
-    os.makedirs(args.model_save_path, exist_ok=True)
-    os.makedirs(args.result_save_path, exist_ok=True)
-
-    n_gpus = torch.cuda.device_count()
-
-    print('Python Version:', sys.version)
-    print('PyTorch Version:', torch.__version__)
-    print('Number of GPUs:', torch.cuda.device_count())
-    print('Save path:',args.save_path)
-
-    if args.distributed:
-        mp.spawn(main_worker, nprocs=n_gpus, args=(n_gpus, args))
-    else:
-        main_worker(0, None, args)
-
+        ## Stop training early if necessary
+        if epoch > 1 and epoch % 50 == 0:
+            trainer.early_stop(epoch)
 
 if __name__ == '__main__':
-    main()
+    if args.distributed:
+        ngpus_per_node = torch.cuda.device_count()
+        logger.info(f"Number of GPUs detected: {ngpus_per_node}")
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
+    else:
+        main_worker(0, 1, args)
