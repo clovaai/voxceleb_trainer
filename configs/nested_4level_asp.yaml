@@ -1,0 +1,68 @@
+# NESTED SPEAKER NETWORK - 4 Levels with ASP
+# ASP (Attentive Statistics Pooling) captures both mean and variance
+# Expected: Additional 3-5% improvement over SAP
+
+## Model architecture
+model: NestedSpeakerNet
+num_levels: 4
+nOut: 512
+encoder_type: ASP          # ASP instead of SAP (better performance)
+fusion_type: concat
+n_mels: 80
+log_input: true
+
+## Data loader
+augment: true
+batch_size: 32
+max_frames: 200
+eval_frames: 0
+nDataLoaderThread: 4
+max_seg_per_spk: 500
+seed: 42
+
+## Training details
+test_interval: 1
+trainfunc: aamsoftmax
+patience: 15
+max_epoch: 100
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Validation
+max_test_pairs: 0
+eval_batch_size: 1
+
+## Augmentation
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Performance optimization
+mixedprec: true
+prefetch_factor: 2
+persistent_workers: true
+gradient_accumulation_steps: 1
+
+## Distributed
+distributed: false
+port: "8888"
+
+## Save
+save_path: exps/nested_4level_asp_exp1
+initial_model: ""

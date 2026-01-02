@@ -1,0 +1,67 @@
+# FEW-SHOT CONFIG - Prototypical Loss
+# Experiment: Few-shot learning with Prototypical Networks
+# Best for: Small datasets, fast training, natural few-shot scenarios
+
+## Data loader
+augment: true
+batch_size: 32  # 32 speakers per batch
+max_frames: 200
+eval_frames: 0
+nDataLoaderThread: 4
+max_seg_per_spk: 500
+seed: 42
+
+## Training details
+test_interval: 1
+trainfunc: proto  # CHANGED: Prototypical loss (was aamsoftmax)
+patience: 15
+max_epoch: 100
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0.0001
+
+## Loss functions - Prototypical specific
+nPerSpeaker: 2  # IMPORTANT: Prototypical requires ≥2 utterances per speaker
+nClasses: 140  # Not used by Prototypical but keep for compatibility
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+max_test_pairs: 0
+eval_batch_size: 1
+
+# Augmentation paths
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Model definition
+n_mels: 80
+model: ResNetSE34L
+encoder_type: ASP  # Attentive Statistics Pooling
+nOut: 512
+log_input: true
+
+## Load and save paths
+save_path: exps/mini_voxceleb1_fewshot_proto
+initial_model: ""
+
+## Performance optimization
+mixedprec: true
+prefetch_factor: 2
+persistent_workers: true
+gradient_accumulation_steps: 1
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## Advanced optimization
+compile_model: false
+enable_profiling: false

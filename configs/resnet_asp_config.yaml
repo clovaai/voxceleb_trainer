@@ -1,0 +1,63 @@
+# ResNetSE34L with ASP (Attentive Statistics Pooling) Encoder
+# Expected: 8-10% improvement over SAP baseline (14.2% EER target vs 15.48%)
+# 
+# ASP vs SAP:
+# - SAP: Weighted mean only (first-order statistics)
+# - ASP: Weighted mean + standard deviation (first & second-order statistics)
+# - Benefits: More discriminative embeddings, better variance modeling
+#
+# Reference: "Attentive Statistics Pooling for Deep Speaker Embedding" 
+#            Okabe et al., Interspeech 2018
+
+## Model architecture
+model: ResNetSE34L
+nOut: 512
+encoder_type: ASP  # ← KEY CHANGE: ASP instead of SAP
+n_mels: 80
+log_input: true
+
+## Data loader - Optimized for ASP
+augment: true
+batch_size: 48  # Slightly larger for stable variance estimation
+max_frames: 200
+eval_frames: 0  # 0 = use full audio length
+nDataLoaderThread: 4
+max_seg_per_spk: 500
+seed: 42
+
+## Training details
+test_interval: 1  # Validate every epoch
+trainfunc: aamsoftmax
+patience: 20  # Increased patience (ASP may need more epochs)
+max_epoch: 150
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.97  # Slightly gentler decay for ASP
+weight_decay: 2e-5  # Light regularization
+
+## Loss functions - AAMSoftmax
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140  # Mini VoxCeleb2 dataset (140 speakers)
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Test configuration
+max_test_pairs: 0  # Use all pairs (~12,559)
+eval_batch_size: 1  # Variable-length audio
+
+## Data augmentation paths
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Performance optimizations
+gradient_accumulation_steps: 1
+mixedprec: true  # Mixed precision (FP16) for faster training

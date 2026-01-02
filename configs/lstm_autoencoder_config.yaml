@@ -1,0 +1,74 @@
+# LSTM + Autoencoder Speaker Verification Model
+# Two-stage architecture for robust temporal modeling
+#
+# Expected Benefits:
+# - Temporal dependencies: LSTM captures speaking patterns over time
+# - Noise robustness: Autoencoder learns to denoise spectral features
+# - Better generalization: 20-35% improvement expected (target: 10-12% EER)
+#
+# Architecture:
+# - Autoencoder: n_mels → 128 latent dimensions (denoising)
+# - LSTM: 2 layers, 256 hidden units, bidirectional
+# - Pooling: ASP (mean + std)
+# - Embedding: 512 dimensions
+
+## Model architecture
+model: LSTMAutoencoder
+nOut: 512
+n_mels: 80
+log_input: true
+
+## LSTM + Autoencoder specific parameters
+ae_latent_dim: 128         # Autoencoder latent space dimension
+lstm_hidden: 256           # LSTM hidden dimension (per direction)
+lstm_layers: 2             # Number of stacked LSTM layers
+pooling_type: ASP          # ASP (mean+std) or SAP (mean only)
+
+## Experiment configuration
+save_path: exps/lstm_autoencoder
+
+## Data loader
+augment: true
+batch_size: 32             # Smaller batch for LSTM (higher memory usage)
+max_frames: 200            # Maximum utterance length
+eval_frames: 0             # 0 = use full audio length
+nDataLoaderThread: 4
+max_seg_per_spk: 500
+seed: 42
+
+## Training details
+test_interval: 1           # Validate every epoch
+trainfunc: aamsoftmax
+patience: 25               # Higher patience (LSTM needs more epochs)
+max_epoch: 200             # More epochs for LSTM convergence
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.0005                 # Lower LR for LSTM stability
+lr_decay: 0.98             # Gentler decay
+weight_decay: 1e-4         # Regularization to prevent overfitting
+
+## Loss functions - AAMSoftmax
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140              # Mini VoxCeleb2 dataset
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Test configuration
+max_test_pairs: 0          # Use all pairs
+eval_batch_size: 1         # Variable-length audio
+
+## Data augmentation paths
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Performance optimizations
+gradient_accumulation_steps: 2  # Accumulate gradients (effective batch=64)
+mixedprec: true            # FP16 mixed precision

@@ -1,0 +1,91 @@
+## Configuration for MLP-Mixer with Raw Waveform Input + Knowledge Distillation
+##
+## Experiment: P3 - Raw Waveform + Distillation
+## Date: December 31, 2025
+## Hypothesis: Raw waveform features + teacher knowledge may achieve comparable
+##             performance to mel-based distillation (V2: 10.32% EER)
+##
+## EXPERIMENT CONFIGURATION:
+## -------------------------
+## Student: MLP-Mixer with SincNet learnable filters (raw waveform)
+## Teacher: LSTM+Autoencoder (9.68% EER, epoch 57)
+## Distillation: Cosine similarity loss (α=0.7, T=4.0)
+##
+## Key Research Questions:
+## 1. Can raw waveform match mel-based performance with distillation?
+## 2. Do learnable filters capture better speaker features than fixed mel?
+## 3. How does training time compare (raw vs mel preprocessing)?
+##
+## Expected Results:
+## - EER: 10.5-11.5% (slightly worse than mel-based V2: 10.32%)
+## - Training time: 1.5× longer due to SincNet frontend
+## - Parameters: ~3.2M (vs V2: 2.66M)
+## - Inference speed: Similar to mel-based (~290 samples/sec)
+##
+## If successful: Raw waveform could replace mel preprocessing
+## If unsuccessful: Mel-spectrogram remains optimal for speaker verification
+##
+
+## Model architecture
+model: MLPMixerSpeaker_RawWaveform
+encoder_type: ASP
+
+## Raw waveform input parameters (SincNet)
+num_filters: 80          # Number of learnable filters
+kernel_size: 251         # Filter length ~15ms @ 16kHz
+stride: 160              # Hop length 10ms @ 16kHz
+
+## MLP-Mixer architecture (same as V2)
+hidden_dim: 192
+num_blocks: 6
+expansion_factor: 4
+groups: 4
+
+## Embedding
+nOut: 512
+
+## Knowledge Distillation
+teacher_model: LSTMAutoencoder
+teacher_checkpoint: exps/lstm_autoencoder_distillation/model/best_state.model
+distillation_alpha: 0.7  # Same as V2 (small student)
+distillation_temperature: 4.0
+
+## Training data (mini dataset for faster iteration)
+train_list: /mnt/ricproject2/voxceleb_new/train_list.txt
+train_path: /mnt/ricproject2/voxceleb_new/voxceleb2
+musan_path: /mnt/ricproject/data/musan
+rir_path: /mnt/ricproject/data/RIRS_NOISES/simulated_rirs
+
+## Validation data
+test_list: /mnt/ricproject2/voxceleb_new/test_list.txt
+test_path: /mnt/ricproject2/voxceleb_new/voxceleb1
+
+## Data loader
+max_frames: 200          # 2 seconds
+augment: false           # Disable for stability
+batch_size: 32           # Smaller batch (raw waveform memory intensive)
+n_cpu: 4
+
+## Optimizer
+optimizer: adam
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0.0001
+
+## Training
+max_epoch: 100           # Full training
+test_interval: 1
+test_step: 1
+
+## Evaluation
+eval_batch_size: 1       # Handle variable-length test audio
+
+## Output
+save_path: exps/mlp_mixer_rawwaveform_distillation
+
+## Loss function
+loss: amsoftmax
+nPerSpeaker: 1
+nClasses: 5994
+margin: 0.2
+scale: 30

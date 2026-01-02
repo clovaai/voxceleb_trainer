@@ -1,0 +1,79 @@
+# PERFORMANCE OPTIMIZED CONFIG - experiment_01_performance_updated.yaml
+# Optimizations applied:
+# 1. Increased batch size for better GPU utilization
+# 2. More DataLoader workers
+# 3. Mixed precision enabled by default
+# 4. Reduced test interval for faster feedback
+# 5. Gradient accumulation for larger effective batch size
+
+## Data loader - OPTIMIZED
+augment: true
+batch_size: 128  # Increased from 100 to 128 for better GPU utilization
+max_frames: 200  # Keep same
+eval_frames: 300  # Keep same
+nDataLoaderThread: 8  # Increased from 5 to 8 for faster data loading
+max_seg_per_spk: 500  # Maximum segments per speaker
+seed: 10  # Random seed for reproducibility
+
+## Training details - OPTIMIZED
+test_interval: 1  # Reduced from 5 to 3 for faster feedback
+trainfunc: aamsoftmax
+patience: 15
+max_epoch: 500
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 5991
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/train_list.txt
+test_list: /mnt/ricproject3/2025/data/list_test_all_formated_cleaned.txt
+train_path: /mnt/ricproject3/2025/data/rearranged_voxceleb2
+test_path: /mnt/ricproject3/2025/data/rearranged_voxceleb1
+
+# NEW: Limit test pairs for faster validation (0 = use all pairs)
+# Examples: 1000 for quick test (~7-10 seconds), 10000 for medium (~70-100 seconds)
+# Full dataset has 553,550 pairs (~70 minutes)
+max_test_pairs: 50000 # Use 50000 pairs for faster validation (~75 seconds)
+
+# NEW: Evaluation batch size for faster GPU utilization
+# Larger batch = faster evaluation, more GPU memory
+# Examples: 16 (safe), 32 (default), 64 (faster), 128 (fastest if memory permits)
+eval_batch_size: 128  # Increased for faster evaluation
+test_path: /mnt/ricproject3/2025/data/rearranged_voxceleb1
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Model definition
+n_mels: 64
+model: ResNetSE34L
+encoder_type: SAP
+nOut: 512
+log_input: false
+
+## Load and save paths
+save_path: exps/performance_optimized_model
+initial_model: ""
+
+## Performance optimization settings - NEW
+mixedprec: true  # Enable mixed precision by default
+prefetch_factor: 3  # Prefetch 3 batches per worker
+persistent_workers: true  # Keep workers alive between epochs
+gradient_accumulation_steps: 1  # Set to 2 or 4 for larger effective batch size
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## Advanced optimization flags - NEW
+compile_model: false  # Set to true if using PyTorch 2.0+
+enable_profiling: false  # Set to true to enable performance profiling

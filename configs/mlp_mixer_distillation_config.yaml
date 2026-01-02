@@ -1,0 +1,115 @@
+# MLP-Mixer Student Model with Knowledge Distillation
+# Paper: "A Speaker Verification System Based on a Modified MLP-Mixer 
+#         Student Model for Transformer Compression"
+#
+# Training Strategy: Student learns from LSTM+Autoencoder teacher (9.68% EER)
+# Expected Performance: 10-11% EER (distillation gap 5-10% typical)
+# Expected Speed: 2-3× faster inference than LSTM (no sequential processing)
+# Expected Size: ~1.5M parameters (60% reduction vs LSTM+AE's 3.87M)
+
+## Model architecture
+model: MLPMixerSpeaker
+nOut: 512
+
+## MLP-Mixer specific parameters
+n_mels: 80                 # Mel-filterbank dimensions (input)
+log_input: true            # Apply log to mel-spectrogram
+hidden_dim: 192            # MLP-Mixer hidden dimension (reduced for efficiency)
+num_blocks: 6              # Number of MLP-Mixer blocks (reduced for efficiency)
+expansion_factor: 3        # MLP expansion ratio (hidden → 3×hidden)
+groups: 4                  # Grouped projections for efficiency
+
+## Experiment configuration
+save_path: exps/mlp_mixer_distillation
+initial_model: ""          # Start from scratch (student training)
+
+## Knowledge Distillation settings
+teacher_model: LSTMAutoencoder
+teacher_checkpoint: exps/lstm_autoencoder/model/model000000057.model  # Best teacher (9.68% EER)
+distillation_alpha: 0.5    # Balance: (1-α)×classification + α×distillation
+distillation_temperature: 4.0  # Soften teacher outputs (higher = softer)
+freeze_teacher: true       # Don't update teacher during training
+
+## Data loader settings
+max_frames: 200            # Max frames per utterance
+batch_size: 64             # Larger batch (student is lighter than LSTM)
+max_seg_per_spk: 100       # Utterances per speaker
+nDataLoaderThread: 8       # Parallel data loading
+augment: true              # Apply data augmentation
+seed: 42                   # Reproducibility
+
+## Training hyperparameters
+test_interval: 5           # Evaluate every 5 epochs
+max_epoch: 100             # Maximum epochs
+trainfunc: amsoftmax       # AAM-Softmax loss
+
+## Optimizer - AdamW with moderate learning rate
+optimizer: adam
+lr: 0.001                  # Moderate LR (student + distillation)
+weight_decay: 2e-4         # Stronger regularization for lightweight model
+
+## Learning rate scheduler
+scheduler: steplr
+lr_decay: 0.95             # Decay per epoch
+patience: 15               # Early stopping patience (less than teacher's 25)
+
+## Mixed precision training
+mixedprec: true            # Enable FP16 for faster training
+
+## Performance optimizations
+gradient_accumulation_steps: 1    # No accumulation (batch_size=64 sufficient)
+num_workers_persistent: true      # Persistent workers
+
+## Loss functions - AAMSoftmax
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140              # Mini VoxCeleb2 dataset
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Test configuration
+max_test_pairs: 0          # Use all pairs
+eval_batch_size: 1         # Variable-length audio
+
+## Data augmentation paths
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## GPU configuration
+gpu: 0
+
+## Evaluation metric
+dcf_p_target: 0.05
+dcf_c_miss: 1
+dcf_c_fa: 1
+
+## Model checkpointing
+save_every_epoch: false    # Only save best model
+
+## Expected Performance Targets
+# ================================
+# Parameters: ~1.5M (vs LSTM+AE 3.87M, ResNet 1.50M)
+# Speed: 2-3× faster than LSTM+AE
+# EER Target: 10-11% (teacher is 9.68%)
+# Training time: ~40-50 epochs to convergence
+# 
+# Key Advantages:
+# - Lightweight: 60% fewer parameters than teacher
+# - Fast: Parallel processing (no LSTM sequential bottleneck)
+# - Efficient: Grouped projections reduce computation
+# - Modern: MLP-Mixer architecture (state-of-the-art design)
+#
+# Distillation Strategy:
+# - Classification loss: AAM-Softmax on speaker labels
+# - Distillation loss: MSE between student/teacher embeddings
+# - Alpha=0.5: Equal weight to both objectives
+# - Temperature=4.0: Soften teacher outputs for better knowledge transfer

@@ -1,0 +1,73 @@
+# MINI VOXCELEB2 CONFIG - For fast experimentation with 140 speakers
+# Dataset: 140 speakers, 30,179 audio files (~7.1 GB)
+# Based on performance optimized config with adjusted parameters
+
+## Data loader - OPTIMIZED for smaller dataset
+augment: true
+batch_size: 64  # Reduced for smaller dataset
+max_frames: 200
+eval_frames: 300
+nDataLoaderThread: 6  # Reduced for smaller dataset
+max_seg_per_spk: 500
+seed: 42  # Same seed as dataset creation
+
+## Training details
+test_interval: 1  # Validate every epoch (faster with smaller dataset)
+trainfunc: aamsoftmax
+patience: 15
+max_epoch: 100  # Reduced for mini dataset
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140  # IMPORTANT: Changed from 5991 to 140 for mini dataset
+
+## Training and test data - MINI DATASET PATHS
+train_list: /mnt/ricproject3/2025/data/mini_train_list.txt
+test_list: /mnt/ricproject3/2025/data/list_test_all_formated_cleaned.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/rearranged_voxceleb1
+
+# Test pairs for validation
+# Using 10000 pairs for reasonable validation speed (~75 seconds)
+max_test_pairs: 10000
+
+# Evaluation batch size
+eval_batch_size: 64
+
+# Augmentation paths (optional - set to empty if not using)
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Model definition
+n_mels: 64
+model: ResNetSE34L
+encoder_type: SAP
+nOut: 512
+log_input: false
+
+## Load and save paths
+save_path: exps/mini_voxceleb2_experiment
+initial_model: ""
+
+## Performance optimization settings
+mixedprec: true  # Enable mixed precision
+prefetch_factor: 3
+persistent_workers: true
+gradient_accumulation_steps: 1
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## Advanced optimization flags
+compile_model: false
+enable_profiling: false

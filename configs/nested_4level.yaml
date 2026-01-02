@@ -1,0 +1,68 @@
+# NESTED SPEAKER NETWORK - 4 Levels
+# Based on "Nested Learning: The Illusion of Deep Learning Architecture"
+# Expected: 8-13% EER improvement + 2× faster than ResNetSE34L
+
+## Model architecture
+model: NestedSpeakerNet
+num_levels: 4              # Number of nested levels (3, 4, or 5)
+nOut: 512                  # Embedding dimension
+encoder_type: SAP          # Temporal pooling: SAP or ASP
+fusion_type: concat        # Multi-scale fusion: concat, attention, or sum
+n_mels: 80
+log_input: true
+
+## Data loader - OPTIMIZED for nested architecture
+augment: true
+batch_size: 48             # Increased for more stable gradients
+max_frames: 200
+eval_frames: 0             # 0 = use full audio length
+nDataLoaderThread: 4
+max_seg_per_spk: 500
+seed: 42
+
+## Training details
+test_interval: 1           # Validate every epoch (fast with nested)
+trainfunc: aamsoftmax
+patience: 20               # Increased patience for better convergence
+max_epoch: 150             # More epochs for full convergence
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.0010                 # Back to moderate LR
+lr_decay: 0.98             # Very gradual decay
+weight_decay: 5e-5         # Lighter regularization
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140              # Mini VoxCeleb1: 140 speakers
+
+## Training and test data - MINI DATASET
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Validation settings
+max_test_pairs: 0          # 0 = use all pairs (~12,559)
+eval_batch_size: 1
+
+## Augmentation paths
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Performance optimization
+mixedprec: true
+prefetch_factor: 2
+persistent_workers: true
+gradient_accumulation_steps: 1
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## Save path
+save_path: exps/nested_4level_exp1
+initial_model: ""

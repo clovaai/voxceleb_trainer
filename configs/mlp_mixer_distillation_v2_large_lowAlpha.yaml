@@ -1,0 +1,107 @@
+# MLP-Mixer Student Model with Knowledge Distillation V2 Large (Low Alpha)
+# ==============================================================================
+# Experiment: P2 Variant - Capacity Scaling with Adjusted Distillation Weight
+# Date: December 30-31, 2025
+# Researcher: Anuraj
+# 
+# Paper: "A Speaker Verification System Based on a Modified MLP-Mixer 
+#         Student Model for Transformer Compression"
+#
+# EXPERIMENT HYPOTHESIS:
+# ---------------------
+# When student capacity > teacher capacity, reducing distillation weight (α)
+# should improve performance by allowing more learning from hard labels.
+#
+# P2 VARIANT CHANGES from V2_Large:
+# ---------------------------------
+# - distillation_alpha: 0.7 → 0.4 (60% hard labels, 40% distillation)
+# - Rationale: Student (7.84M params) > Teacher (3.87M params, 102% larger)
+# - Theory: Large students need more direct supervision, less teacher mimicry
+# - Expected EER: 12-13% (vs V2_Large's 14.84%, vs V2's 10.32%)
+#
+# Model Architecture (same as V2_Large):
+# -------------------------------------
+# - hidden_dim: 256 (was 192 in V2, +33% width)
+# - num_blocks: 8 (was 6 in V2, +33% depth)
+# - expansion_factor: 4 (was 3 in V2, +33% expansion)
+# - groups: 4 (unchanged, grouped projections)
+# - Expected params: ~7.84M (195% larger than V2's 2.66M)
+#
+# Training Strategy:
+# -----------------
+# - Teacher: LSTM+Autoencoder (9.68% EER, 3.87M params)
+# - Student: Large MLP-Mixer (7.84M params)
+# - Distillation: Cosine similarity loss (proven effective in V2)
+# - Alpha: 0.4 (reduced from 0.7 for capacity mismatch compensation)
+# - Dataset: Mini VoxCeleb2 (30K samples, 140 speakers) for fast iteration
+#
+# RESULTS ACHIEVED:
+# ----------------
+# - Best VEER: 10.11% (Epoch 90)
+# - Final VEER: 10.32% (Epoch 100)
+# - Status: ✅ HYPOTHESIS VALIDATED
+# - Finding: α=0.4 fixes capacity mismatch issue
+# - Performance: Same as V2 but with 195% more parameters
+# - Conclusion: V2 more efficient, but V2_LA proves α-tuning principle
+#
+# See: research_logs/2025-12-30-31-experimental-results-analysis.md
+# ==============================================================================
+
+## Model architecture
+model: MLPMixerSpeaker
+nOut: 512
+
+## MLP-Mixer specific parameters (P2 SCALED UP)
+n_mels: 80                 # Mel-filterbank dimensions (input)
+log_input: true            # Apply log to mel-spectrogram
+hidden_dim: 256            # INCREASED from 192 (+33% width)
+num_blocks: 8              # INCREASED from 6 (+33% depth)
+expansion_factor: 4        # INCREASED from 3 (+33% expansion)
+groups: 4                  # Keep same (grouped projections efficiency)
+
+## Experiment configuration
+save_path: exps/mlp_mixer_distillation_v2_large_lowAlpha
+initial_model: ""          # Start from scratch (student training)
+
+## Knowledge Distillation settings (P2 VARIANT - LOWER ALPHA)
+teacher_model: LSTMAutoencoder
+teacher_checkpoint: exps/lstm_autoencoder/model/model000000057.model  # Best teacher (9.68% EER)
+distillation_alpha: 0.4    # REDUCED from 0.7 (student > teacher size)
+distillation_temperature: 4.0  # Soften teacher outputs
+distillation_type: cosine  # Cosine similarity (proven better than MSE)
+freeze_teacher: true       # Don't update teacher during training
+
+## Data loader settings
+max_frames: 200            # Max frames per utterance
+batch_size: 64             # Keep same (larger model fits in memory)
+max_seg_per_spk: 100       # Utterances per speaker
+nDataLoaderThread: 8       # Parallel data loading
+augment: false             # Disable augmentation (mini dataset, no MUSAN paths)
+seed: 42                   # Reproducibility
+
+## Training hyperparameters
+test_interval: 5           # Evaluate every 5 epochs
+max_epoch: 100             # Train for 100 epochs
+trainfunc: amsoftmax       # Angular margin softmax
+optimizer: adam
+scheduler: steplr
+lr: 0.001                  # Initial learning rate
+lr_decay: 0.95             # LR decay factor
+weight_decay: 0.0          # L2 regularization
+
+## Loss function
+nPerSpeaker: 1             # Utterances per speaker in batch
+nClasses: 140              # Mini VoxCeleb2 dataset (same as V2)
+
+## Evaluation settings
+eval_frames: 0             # Use full utterance for evaluation
+eval_batch_size: 1         # Batch size 1 for variable-length test audio
+
+## Data paths (MINI DATASET - same as V2)
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+## Model checkpointing
+score_save_epoch: 5        # Save scores every 5 epochs

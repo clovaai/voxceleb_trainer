@@ -1,0 +1,37 @@
+# /mnt/ricproject3/2025/Colvaiai/voxceleb_trainer/configs/experiment_01.yaml
+#experiment
+#name: experiment_01
+
+## Data loader
+augment: true
+batch_size: 100
+
+## Training details
+test_interval: 5
+trainfunc: aamsoftmax
+patience: 15
+
+## Optimizer
+optimizer: adam
+lr: 0.001
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 5991
+
+## Training and test data
+train_list: /mnt/ricproject3/2025/data/train_list.txt
+test_list: /mnt/ricproject3/2025/data/list_test_all_formated_cleaned.txt
+train_path : /mnt/ricproject3/2025/data/rearranged_voxceleb2
+test_path : /mnt/ricproject3/2025/data/rearranged_voxceleb1
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Model definition
+n_mels: 64
+model: ResNetSE34L
+
+## Load and save paths
+save_path: exps/my_first_custom_model

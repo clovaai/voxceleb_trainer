@@ -1,0 +1,79 @@
+## Configuration for MLP-Mixer with Raw Waveform Input (Baseline - No Distillation)
+##
+## Experiment: P3 - Raw Waveform Input Testing
+## Date: December 31, 2025
+## Hypothesis: Learnable SincNet filters may capture speaker-discriminative features
+##             automatically, potentially outperforming fixed mel-spectrogram preprocessing
+##
+## Key Differences from Mel-based MLP-Mixer:
+## 1. Raw waveform input (no mel-spectrogram preprocessing)
+## 2. SincNet learnable bandpass filters (80 filters)
+## 3. Additional CNN feature extraction layers
+## 4. Longer training time expected (more parameters in frontend)
+##
+## Expected Performance:
+## - EER: 12-14% (baseline, no distillation)
+## - Parameters: ~3.2M (slightly more due to SincNet frontend)
+## - Training time: 1.5× longer than mel-based version
+##
+## Purpose: Baseline experiment to validate raw waveform processing before
+##          applying knowledge distillation
+##
+
+## Model architecture
+model: MLPMixerSpeaker_RawWaveform
+encoder_type: ASP
+
+## Raw waveform input parameters (SincNet)
+num_filters: 80          # Number of learnable filters (same as n_mels)
+kernel_size: 251         # Filter length ~15ms @ 16kHz
+stride: 160              # Hop length 10ms @ 16kHz (same as mel-spec)
+
+## MLP-Mixer architecture
+hidden_dim: 192          # Hidden dimension (same as V2)
+num_blocks: 6            # Number of blocks (same as V2)
+expansion_factor: 4      # MLP expansion ratio
+groups: 4                # Grouped projections for efficiency
+
+## Embedding
+nOut: 512
+
+## Training data (start with mini dataset for faster iteration)
+train_list: /mnt/ricproject2/voxceleb_new/train_list.txt
+train_path: /mnt/ricproject2/voxceleb_new/voxceleb2
+musan_path: /mnt/ricproject/data/musan
+rir_path: /mnt/ricproject/data/RIRS_NOISES/simulated_rirs
+
+## Validation data
+test_list: /mnt/ricproject2/voxceleb_new/test_list.txt
+test_path: /mnt/ricproject2/voxceleb_new/voxceleb1
+
+## Data loader - No augmentation for initial test
+max_frames: 200          # 2 seconds @ 10ms frames
+augment: false           # Disable for baseline testing
+batch_size: 32           # Smaller batch (raw waveform uses more memory)
+n_cpu: 4
+
+## Optimizer
+optimizer: adam
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0.0001
+
+## Training
+max_epoch: 50            # Shorter for baseline test
+test_interval: 1
+test_step: 1
+
+## Evaluation
+eval_batch_size: 1       # Handle variable-length test audio
+
+## Output
+save_path: exps/mlp_mixer_rawwaveform_baseline
+
+## Loss function
+loss: amsoftmax
+nPerSpeaker: 1
+nClasses: 5994
+margin: 0.2
+scale: 30

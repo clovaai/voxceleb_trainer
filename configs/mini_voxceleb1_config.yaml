@@ -1,0 +1,74 @@
+# MINI VOXCELEB1 CONFIG - For fast experimentation with 50 speakers
+# Dataset: 50 speakers, 6,286 audio files (~1.6 GB)
+# Based on performance optimized config with adjusted parameters
+
+## Data loader - OPTIMIZED for smaller dataset
+augment: true
+batch_size: 32  # Reduced for smaller dataset
+max_frames: 200
+eval_frames: 0  # 0 = use full audio length (no truncation)
+nDataLoaderThread: 4  # Reduced for smaller dataset
+max_seg_per_spk: 500
+seed: 42  # Same seed as dataset creation
+
+## Training details
+test_interval: 1  # Validate every epoch (faster with smaller dataset)
+trainfunc: aamsoftmax
+patience: 15
+max_epoch: 100  # Reduced for mini dataset
+
+## Optimizer
+optimizer: adam
+scheduler: steplr
+lr: 0.001
+lr_decay: 0.95
+weight_decay: 0
+
+## Loss functions
+margin: 0.2
+scale: 30
+nPerSpeaker: 1
+nClasses: 140  # IMPORTANT: 140 speakers in mini VoxCeleb2 dataset
+
+## Training and test data - MINI VOXCELEB2 FOR TRAINING, MINI VOXCELEB1 FOR TESTING
+train_list: /mnt/ricproject3/2025/data/mini_voxceleb2_train_list.txt
+test_list: /mnt/ricproject3/2025/data/mini_test_list.txt
+train_path: /mnt/ricproject3/2025/data/mini_voxceleb2
+test_path: /mnt/ricproject3/2025/data/mini_voxceleb1
+
+# Test pairs for validation
+# Using all available pairs (12,559) for this small test set
+max_test_pairs: 0  # 0 = use all pairs (~12,559 pairs, ~2 minutes)
+
+# Evaluation batch size
+# IMPORTANT: Must be 1 when eval_frames=0 (variable length audio)
+eval_batch_size: 1  # Process one audio at a time for variable-length evaluation
+
+# Augmentation paths (optional - set to empty if not using)
+musan_path: /mnt/ricproject3/2025/data/musan
+rir_path: /mnt/ricproject3/2025/data/RIRS_NOISES/simulated_rirs
+
+## Model definition
+n_mels: 80
+model: ResNetSE34L
+encoder_type: SAP
+nOut: 512
+log_input: false
+
+## Load and save paths
+save_path: exps/mini_voxceleb1_experiment_12
+initial_model: ""
+
+## Performance optimization settings
+mixedprec: true  # Enable mixed precision
+prefetch_factor: 2  # Reduced for smaller dataset
+persistent_workers: true
+gradient_accumulation_steps: 1
+
+## Distributed training
+distributed: false
+port: "8888"
+
+## Advanced optimization flags
+compile_model: false
+enable_profiling: false
