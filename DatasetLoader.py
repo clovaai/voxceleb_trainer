@@ -4,16 +4,12 @@
 import torch
 import numpy
 import random
-import pdb
 import os
-import threading
-import time
 import math
 import glob
 import soundfile
 from scipy import signal
-from scipy.io import wavfile
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torch.distributed as dist
 
 def round_down(num, divisor):
@@ -52,7 +48,7 @@ def loadWAV(filename, max_frames, evalmode=True, num_eval=10):
 
     feat = numpy.stack(feats,axis=0).astype(numpy.float)
 
-    return feat;
+    return feat
     
 class AugmentWAV(object):
 
@@ -67,14 +63,14 @@ class AugmentWAV(object):
         self.numnoise   = {'noise':[1,1], 'speech':[3,7],  'music':[1,1] }
         self.noiselist  = {}
 
-        augment_files   = glob.glob(os.path.join(musan_path,'*/*/*/*.wav'));
+        augment_files   = glob.glob(os.path.join(musan_path,'*/*/*/*.wav'))
 
         for file in augment_files:
             if not file.split('/')[-4] in self.noiselist:
                 self.noiselist[file.split('/')[-4]] = []
             self.noiselist[file.split('/')[-4]].append(file)
 
-        self.rir_files  = glob.glob(os.path.join(rir_path,'*/*/*.wav'));
+        self.rir_files  = glob.glob(os.path.join(rir_path,'*/*/*.wav'))
 
     def additive_noise(self, noisecat, audio):
 
@@ -111,14 +107,14 @@ class train_dataset_loader(Dataset):
         self.augment_wav = AugmentWAV(musan_path=musan_path, rir_path=rir_path, max_frames = max_frames)
 
         self.train_list = train_list
-        self.max_frames = max_frames;
+        self.max_frames = max_frames
         self.musan_path = musan_path
         self.rir_path   = rir_path
         self.augment    = augment
         
         # Read training files
         with open(train_list) as dataset_file:
-            lines = dataset_file.readlines();
+            lines = dataset_file.readlines()
 
         # Make a dictionary of ID names and ID indices
         dictkeys = list(set([x.split()[0] for x in lines]))
@@ -130,10 +126,10 @@ class train_dataset_loader(Dataset):
         self.data_label = []
         
         for lidx, line in enumerate(lines):
-            data = line.strip().split();
+            data = line.strip().split()
 
-            speaker_label = dictkeys[data[0]];
-            filename = os.path.join(train_path,data[1]);
+            speaker_label = dictkeys[data[0]]
+            filename = os.path.join(train_path,data[1])
             
             self.data_label.append(speaker_label)
             self.data_list.append(filename)
@@ -157,7 +153,7 @@ class train_dataset_loader(Dataset):
                 elif augtype == 4:
                     audio   = self.augment_wav.additive_noise('noise',audio)
                     
-            feat.append(audio);
+            feat.append(audio)
 
         feat = numpy.concatenate(feat, axis=0)
 
@@ -170,7 +166,7 @@ class train_dataset_loader(Dataset):
 
 class test_dataset_loader(Dataset):
     def __init__(self, test_list, test_path, eval_frames, num_eval, **kwargs):
-        self.max_frames = eval_frames;
+        self.max_frames = eval_frames
         self.num_eval   = num_eval
         self.test_path  = test_path
         self.test_list  = test_list
@@ -186,13 +182,13 @@ class test_dataset_loader(Dataset):
 class train_dataset_sampler(torch.utils.data.Sampler):
     def __init__(self, data_source, nPerSpeaker, max_seg_per_spk, batch_size, distributed, seed, **kwargs):
 
-        self.data_label         = data_source.data_label;
-        self.nPerSpeaker        = nPerSpeaker;
-        self.max_seg_per_spk    = max_seg_per_spk;
-        self.batch_size         = batch_size;
-        self.epoch              = 0;
-        self.seed               = seed;
-        self.distributed        = distributed;
+        self.data_label         = data_source.data_label
+        self.nPerSpeaker        = nPerSpeaker
+        self.max_seg_per_spk    = max_seg_per_spk
+        self.batch_size         = batch_size
+        self.epoch              = 0
+        self.seed               = seed
+        self.distributed        = distributed
         
     def __iter__(self):
 
@@ -206,12 +202,12 @@ class train_dataset_sampler(torch.utils.data.Sampler):
         for index in indices:
             speaker_label = self.data_label[index]
             if not (speaker_label in data_dict):
-                data_dict[speaker_label] = [];
-            data_dict[speaker_label].append(index);
+                data_dict[speaker_label] = []
+            data_dict[speaker_label].append(index)
 
 
         ## Group file indices for each class
-        dictkeys = list(data_dict.keys());
+        dictkeys = list(data_dict.keys())
         dictkeys.sort()
 
         lol = lambda lst, sz: [lst[i:i+sz] for i in range(0, len(lst), sz)]

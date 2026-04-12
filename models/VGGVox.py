@@ -9,9 +9,9 @@ from torch.nn import Parameter
 
 class MainModel(nn.Module):
     def __init__(self, nOut = 1024, encoder_type='SAP', log_input=True, **kwargs):
-        super(MainModel, self).__init__();
+        super(MainModel, self).__init__()
 
-        print('Embedding size is %d, encoder %s.'%(nOut, encoder_type))
+        print(f'Embedding size is {nOut:d}, encoder {encoder_type}.')
         
         self.encoder_type = encoder_type
         self.log_input    = log_input
@@ -44,7 +44,7 @@ class MainModel(nn.Module):
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
             
-        );
+        )
 
         if self.encoder_type == "MAX":
             self.encoder = nn.AdaptiveMaxPool2d((1,1))
@@ -77,7 +77,7 @@ class MainModel(nn.Module):
                 if self.log_input: x = x.log()
                 x = self.instancenorm(x).unsqueeze(1)
 
-        x = self.netcnn(x);
+        x = self.netcnn(x)
 
         if self.encoder_type == "MAX" or self.encoder_type == "TAP":
             x = self.encoder(x)
@@ -91,7 +91,7 @@ class MainModel(nn.Module):
             w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
             x = torch.sum(x * w, dim=1)
 
-        x = self.fc(x);
+        x = self.fc(x)
 
-        return x;
+        return x
 

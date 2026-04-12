@@ -6,9 +6,7 @@
 import argparse
 import os
 import subprocess
-import pdb
 import hashlib
-import time
 import glob
 import tarfile
 from zipfile import ZipFile
@@ -18,18 +16,18 @@ from scipy.io import wavfile
 ## ========== ===========
 ## Parse input arguments
 ## ========== ===========
-parser = argparse.ArgumentParser(description = "VoxCeleb downloader");
+parser = argparse.ArgumentParser(description = "VoxCeleb downloader")
 
-parser.add_argument('--save_path',     type=str, default="data", help='Target directory');
-parser.add_argument('--user',         type=str, default="user", help='Username');
-parser.add_argument('--password',     type=str, default="pass", help='Password');
+parser.add_argument('--save_path',     type=str, default="data", help='Target directory')
+parser.add_argument('--user',         type=str, default="user", help='Username')
+parser.add_argument('--password',     type=str, default="pass", help='Password')
 
 parser.add_argument('--download', dest='download', action='store_true', help='Enable download')
 parser.add_argument('--extract',  dest='extract',  action='store_true', help='Enable extract')
 parser.add_argument('--convert',  dest='convert',  action='store_true', help='Enable convert')
 parser.add_argument('--augment',  dest='augment',  action='store_true', help='Download and extract augmentation files')
 
-args = parser.parse_args();
+args = parser.parse_args()
 
 ## ========== ===========
 ## MD5SUM
@@ -53,16 +51,16 @@ def download(args, lines):
         outfile = url.split('/')[-1]
 
         ## Download files
-        out     = subprocess.call('wget %s --user %s --password %s -O %s/%s'%(url,args.user,args.password,args.save_path,outfile), shell=True)
+        out     = subprocess.call(f'wget {url} --user {args.user} --password {args.password} -O {args.save_path}/{outfile}', shell=True)
         if out != 0:
-            raise ValueError('Download failed %s. If download fails repeatedly, use alternate URL on the VoxCeleb website.'%url)
+            raise ValueError(f'Download failed {url}. If download fails repeatedly, use alternate URL on the VoxCeleb website.')
 
         ## Check MD5
-        md5ck     = md5('%s/%s'%(args.save_path,outfile))
+        md5ck     = md5(f'{args.save_path}/{outfile}')
         if md5ck == md5gt:
-            print('Checksum successful %s.'%outfile)
+            print(f'Checksum successful {outfile}.')
         else:
-            raise Warning('Checksum failed %s.'%outfile)
+            raise Warning(f'Checksum failed {outfile}.')
 
 ## ========== ===========
 ## Concatenate file parts
@@ -75,16 +73,16 @@ def concatenate(args,lines):
         md5gt     = line.split()[2]
 
         ## Concatenate files
-        out     = subprocess.call('cat %s/%s > %s/%s' %(args.save_path,infile,args.save_path,outfile), shell=True)
+        out     = subprocess.call(f'cat {args.save_path}/{infile} > {args.save_path}/{outfile}', shell=True)
 
         ## Check MD5
-        md5ck     = md5('%s/%s'%(args.save_path,outfile))
+        md5ck     = md5(f'{args.save_path}/{outfile}')
         if md5ck == md5gt:
-            print('Checksum successful %s.'%outfile)
+            print(f'Checksum successful {outfile}.')
         else:
-            raise Warning('Checksum failed %s.'%outfile)
+            raise Warning(f'Checksum failed {outfile}.')
 
-        out     = subprocess.call('rm %s/%s' %(args.save_path,infile), shell=True)
+        out     = subprocess.call(f'rm {args.save_path}/{infile}', shell=True)
 
 ## ========== ===========
 ## Extract zip files
@@ -108,7 +106,7 @@ def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
 
 def full_extract(args, fname):
 
-    print('Extracting %s'%fname)
+    print(f'Extracting {fname}')
     if fname.endswith(".tar.gz"):
         with tarfile.open(fname, "r:gz") as tar:
             safe_extract(tar, args.save_path)
@@ -122,7 +120,7 @@ def full_extract(args, fname):
 ## ========== ===========
 def part_extract(args, fname, target):
 
-    print('Extracting %s'%fname)
+    print(f'Extracting {fname}')
     with ZipFile(fname, 'r') as zf:
         for infile in zf.namelist():
             if any([infile.startswith(x) for x in target]):
@@ -135,22 +133,22 @@ def part_extract(args, fname, target):
 ## ========== ===========
 def convert(args):
 
-    files     = glob.glob('%s/voxceleb2/*/*/*.m4a'%args.save_path)
+    files     = glob.glob(f'{args.save_path}/voxceleb2/*/*/*.m4a')
     files.sort()
 
     print('Converting files from AAC to WAV')
     for fname in tqdm(files):
         outfile = fname.replace('.m4a','.wav')
-        out = subprocess.call('ffmpeg -y -i %s -ac 1 -vn -acodec pcm_s16le -ar 16000 %s >/dev/null 2>/dev/null' %(fname,outfile), shell=True)
+        out = subprocess.call(f'ffmpeg -y -i {fname} -ac 1 -vn -acodec pcm_s16le -ar 16000 {outfile} >/dev/null 2>/dev/null', shell=True)
         if out != 0:
-            raise ValueError('Conversion failed %s.'%fname)
+            raise ValueError(f'Conversion failed {fname}.')
 
 ## ========== ===========
 ## Split MUSAN for faster random access
 ## ========== ===========
 def split_musan(args):
 
-    files = glob.glob('%s/musan/*/*/*.wav'%args.save_path)
+    files = glob.glob(f'{args.save_path}/musan/*/*/*.wav')
 
     audlen = 16000*5
     audstr = 16000*3
@@ -160,7 +158,7 @@ def split_musan(args):
         writedir = os.path.splitext(file.replace('/musan/','/musan_split/'))[0]
         os.makedirs(writedir)
         for st in range(0,len(aud)-audlen,audstr):
-            wavfile.write(writedir+'/%05d.wav'%(st/fs),fs,aud[st:st+audlen])
+            wavfile.write(f'{writedir}/{st/fs:05.0f}.wav',fs,aud[st:st+audlen])
 
         print(idx,file)
 
@@ -197,9 +195,9 @@ if __name__ == "__main__":
         concatenate(args, files)
         for file in files:
             full_extract(args,os.path.join(args.save_path,file.split()[1]))
-        out = subprocess.call('mv %s/dev/aac/* %s/aac/ && rm -r %s/dev' %(args.save_path,args.save_path,args.save_path), shell=True)
-        out = subprocess.call('mv %s/wav %s/voxceleb1' %(args.save_path,args.save_path), shell=True)
-        out = subprocess.call('mv %s/aac %s/voxceleb2' %(args.save_path,args.save_path), shell=True)
+        out = subprocess.call(f'mv {args.save_path}/dev/aac/* {args.save_path}/aac/ && rm -r {args.save_path}/dev', shell=True)
+        out = subprocess.call(f'mv {args.save_path}/wav {args.save_path}/voxceleb1', shell=True)
+        out = subprocess.call(f'mv {args.save_path}/aac {args.save_path}/voxceleb2', shell=True)
 
     if args.convert:
         convert(args)

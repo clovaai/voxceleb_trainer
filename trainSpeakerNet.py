@@ -1,14 +1,14 @@
 #!/usr/bin/python
 #-*- coding: utf-8 -*-
 
-import sys, time, os, argparse
+import sys, os, argparse
 import yaml
-import numpy
 import torch
 import glob
 import zipfile
 import warnings
 import datetime
+import logging
 from tuneThreshold import *
 from SpeakerNet import *
 from DatasetLoader import *
@@ -85,6 +85,7 @@ parser.add_argument('--eval',           dest='eval', action='store_true', help='
 parser.add_argument('--port',           type=str,   default="8888", help='Port for distributed training, input as text')
 parser.add_argument('--distributed',    dest='distributed', action='store_true', help='Enable distributed training')
 parser.add_argument('--mixedprec',      dest='mixedprec',   action='store_true', help='Enable mixed precision training')
+parser.add_argument('--gpu_id',         type=int,   default=0,      help='GPU index for single GPU training')
 
 args = parser.parse_args()
 
@@ -103,7 +104,7 @@ if args.config is not None:
             typ = find_option_type(k, parser)
             args.__dict__[k] = typ(v)
         else:
-            sys.stderr.write("Ignored unknown parameter {} in yaml.\n".format(k))
+            sys.stderr.write(f"Ignored unknown parameter {k} in yaml.\n")
 
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -113,6 +114,19 @@ if args.config is not None:
 def main_worker(gpu, ngpus_per_node, args):
 
     args.gpu = gpu
+
+    logger = logging.getLogger('SpeakerNet')
+
+    if args.gpu == 0:
+        logging.basicConfig(
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler(args.result_save_path+"/scores.txt", mode="a+"),
+            ],
+            level=logging.INFO,
+            format='[%(levelname)s] :: %(asctime)s :: %(message)s',
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
 
     ## Load models
     s = SpeakerNet(**vars(args))
@@ -128,17 +142,14 @@ def main_worker(gpu, ngpus_per_node, args):
 
         s = torch.nn.parallel.DistributedDataParallel(s, device_ids=[args.gpu], find_unused_parameters=True)
 
-        print('Loaded the model on GPU {:d}'.format(args.gpu))
+        if args.gpu == 0:
+            logger.info(f'Loaded the model on GPU {args.gpu:d}')
 
     else:
         s = WrappedModel(s).cuda(args.gpu)
 
     it = 1
     eers = [100]
-
-    if args.gpu == 0:
-        ## Write args to scorefile
-        scorefile   = open(args.result_save_path+"/scores.txt", "a+")
 
     ## Initialise trainer and data loader
     train_dataset = train_dataset_loader(**vars(args))
@@ -158,15 +169,17 @@ def main_worker(gpu, ngpus_per_node, args):
     trainer     = ModelTrainer(s, **vars(args))
 
     ## Load model weights
-    modelfiles = glob.glob('%s/model0*.model'%args.model_save_path)
+    modelfiles = glob.glob(f'{args.model_save_path}/model0*.model')
     modelfiles.sort()
 
     if(args.initial_model != ""):
         trainer.loadParameters(args.initial_model)
-        print("Model {} loaded!".format(args.initial_model))
+        if args.gpu == 0:
+            logger.info(f"Model {args.initial_model} loaded!")
     elif len(modelfiles) >= 1:
         trainer.loadParameters(modelfiles[-1])
-        print("Model {} loaded from previous state!".format(modelfiles[-1]))
+        if args.gpu == 0:
+            logger.info(f"Model {modelfiles[-1]} loaded from previous state!")
         it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
 
     for ii in range(1,it):
@@ -177,9 +190,10 @@ def main_worker(gpu, ngpus_per_node, args):
 
         pytorch_total_params = sum(p.numel() for p in s.module.__S__.parameters())
 
-        print('Total parameters: ',pytorch_total_params)
-        print('Test list',args.test_list)
-        
+        if args.gpu == 0:
+            logger.info(f'Total parameters: {pytorch_total_params:d}')
+            logger.info(f'Test list {args.test_list}')
+
         sc, lab, _ = trainer.evaluateFromList(**vars(args))
 
         if args.gpu == 0:
@@ -189,7 +203,7 @@ def main_worker(gpu, ngpus_per_node, args):
             fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
             mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, args.dcf_p_target, args.dcf_c_miss, args.dcf_c_fa)
 
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "VEER {:2.4f}".format(result[1]), "MinDCF {:2.5f}".format(mindcf))
+            logger.info(f"VEER {result[1]:2.4f} MinDCF {mindcf:2.5f}")
 
         return
 
@@ -198,13 +212,13 @@ def main_worker(gpu, ngpus_per_node, args):
         pyfiles = glob.glob('./*.py')
         strtime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
-        zipf = zipfile.ZipFile(args.result_save_path+ '/run%s.zip'%strtime, 'w', zipfile.ZIP_DEFLATED)
+        zipf = zipfile.ZipFile(f'{args.result_save_path}/run{strtime}.zip', 'w', zipfile.ZIP_DEFLATED)
         for file in pyfiles:
             zipf.write(file)
         zipf.close()
 
-        with open(args.result_save_path + '/run%s.cmd'%strtime, 'w') as f:
-            f.write('%s'%args)
+        with open(f'{args.result_save_path}/run{strtime}.cmd', 'w') as f:
+            f.write(f'{args}')
 
     ## Core training script
     for it in range(it,args.max_epoch+1):
@@ -216,8 +230,7 @@ def main_worker(gpu, ngpus_per_node, args):
         loss, traineer = trainer.train_network(train_loader, verbose=(args.gpu == 0))
 
         if args.gpu == 0:
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f}".format(it, traineer, loss, max(clr)))
-            scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)))
+            logger.info(f"Epoch {it:d}, TEER/TAcc {traineer:2.2f}, TLOSS {loss:f}, LR {max(clr):f}")
 
         if it % args.test_interval == 0:
 
@@ -232,18 +245,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
                 eers.append(result[1])
 
-                print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}".format(it, result[1], mindcf))
-                scorefile.write("Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}\n".format(it, result[1], mindcf))
+                logger.info(f"Epoch {it:d}, VEER {result[1]:2.4f}, MinDCF {mindcf:2.5f}")
 
-                trainer.saveParameters(args.model_save_path+"/model%09d.model"%it)
+                trainer.saveParameters(f"{args.model_save_path}/model{it:09d}.model")
 
-                with open(args.model_save_path+"/model%09d.eer"%it, 'w') as eerfile:
-                    eerfile.write('{:2.4f}'.format(result[1]))
-
-                scorefile.flush()
-
-    if args.gpu == 0:
-        scorefile.close()
+                with open(f"{args.model_save_path}/model{it:09d}.eer", 'w') as eerfile:
+                    eerfile.write(f'{result[1]:2.4f}')
 
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -258,6 +265,9 @@ def main():
 
     os.makedirs(args.model_save_path, exist_ok=True)
     os.makedirs(args.result_save_path, exist_ok=True)
+
+    if not args.distributed:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     n_gpus = torch.cuda.device_count()
 

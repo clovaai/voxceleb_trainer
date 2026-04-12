@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy, sys, random
 import time, itertools, importlib
+from tqdm import tqdm
 
 from DatasetLoader import test_dataset_loader
 from torch.cuda.amp import autocast, GradScaler
@@ -40,7 +41,7 @@ class SpeakerNet(nn.Module):
         data = data.reshape(-1, data.size()[-1]).cuda()
         outp = self.__S__.forward(data)
 
-        if label == None:
+        if label is None:
             return outp
 
         else:
@@ -79,53 +80,43 @@ class ModelTrainer(object):
 
         self.__model__.train()
 
-        stepsize = loader.batch_size
-
         counter = 0
-        index = 0
         loss = 0
         top1 = 0
-        # EER or accuracy
 
-        tstart = time.time()
+        with tqdm(loader, unit="batch", disable=not verbose) as tepoch:
 
-        for data, data_label in loader:
+            for data, data_label in tepoch:
 
-            data = data.transpose(1, 0)
+                data = data.transpose(1, 0)
 
-            self.__model__.zero_grad()
+                self.__model__.zero_grad()
 
-            label = torch.LongTensor(data_label).cuda()
+                label = torch.LongTensor(data_label).cuda()
 
-            if self.mixedprec:
-                with autocast():
+                if self.mixedprec:
+                    with autocast():
+                        nloss, prec1 = self.__model__(data, label)
+                    self.scaler.scale(nloss).backward()
+                    self.scaler.step(self.__optimizer__)
+                    self.scaler.update()
+                else:
                     nloss, prec1 = self.__model__(data, label)
-                self.scaler.scale(nloss).backward()
-                self.scaler.step(self.__optimizer__)
-                self.scaler.update()
-            else:
-                nloss, prec1 = self.__model__(data, label)
-                nloss.backward()
-                self.__optimizer__.step()
+                    nloss.backward()
+                    self.__optimizer__.step()
 
-            loss += nloss.detach().cpu().item()
-            top1 += prec1.detach().cpu().item()
-            counter += 1
-            index += stepsize
+                loss += nloss.detach().cpu().item()
+                top1 += prec1.detach().cpu().item()
+                counter += 1
 
-            telapsed = time.time() - tstart
-            tstart = time.time()
+                # Print statistics to progress bar
+                tepoch.set_postfix(loss=loss/counter)
 
-            if verbose:
-                sys.stdout.write("\rProcessing {:d} of {:d}:".format(index, loader.__len__() * loader.batch_size))
-                sys.stdout.write("Loss {:f} TEER/TAcc {:2.3f}% - {:.2f} Hz ".format(loss / counter, top1 / counter, stepsize / telapsed))
-                sys.stdout.flush()
+                if self.lr_step == "iteration":
+                    self.__scheduler__.step()
 
-            if self.lr_step == "iteration":
+            if self.lr_step == "epoch":
                 self.__scheduler__.step()
-
-        if self.lr_step == "epoch":
-            self.__scheduler__.step()
 
         return (loss / counter, top1 / counter)
 
@@ -176,7 +167,7 @@ class ModelTrainer(object):
 
             if idx % print_interval == 0 and rank == 0:
                 sys.stdout.write(
-                    "\rReading {:d} of {:d}: {:.2f} Hz, embedding size {:d}".format(idx, test_loader.__len__(), idx / telapsed, ref_feat.size()[1])
+                    f"\rReading {idx:d} of {test_loader.__len__():d}: {idx / telapsed:.2f} Hz, embedding size {ref_feat.size()[1]:d}"
                 )
 
         all_scores = []
@@ -225,7 +216,7 @@ class ModelTrainer(object):
 
                 if idx % print_interval == 0:
                     telapsed = time.time() - tstart
-                    sys.stdout.write("\rComputing {:d} of {:d}: {:.2f} Hz".format(idx, len(lines), idx / telapsed))
+                    sys.stdout.write(f"\rComputing {idx:d} of {len(lines):d}: {idx / telapsed:.2f} Hz")
                     sys.stdout.flush()
 
         return (all_scores, all_labels, all_trials)
@@ -245,7 +236,7 @@ class ModelTrainer(object):
     def loadParameters(self, path):
 
         self_state = self.__model__.module.state_dict()
-        loaded_state = torch.load(path, map_location="cuda:%d" % self.gpu)
+        loaded_state = torch.load(path, map_location=f"cuda:{self.gpu:d}")
         if len(loaded_state.keys()) == 1 and "model" in loaded_state:
             loaded_state = loaded_state["model"]
             newdict = {}
@@ -263,11 +254,11 @@ class ModelTrainer(object):
                 name = name.replace("module.", "")
 
                 if name not in self_state:
-                    print("{} is not in the model.".format(origname))
+                    print(f"{origname} is not in the model.")
                     continue
 
             if self_state[name].size() != loaded_state[origname].size():
-                print("Wrong parameter length: {}, model: {}, loaded: {}".format(origname, self_state[name].size(), loaded_state[origname].size()))
+                print(f"Wrong parameter length: {origname}, model: {self_state[name].size()}, loaded: {loaded_state[origname].size()}")
                 continue
 
             self_state[name].copy_(param)

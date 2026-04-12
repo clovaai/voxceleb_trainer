@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time, pdb, numpy
+import numpy
 from tuneThreshold import tuneThresholdfromScore
 import random
 
@@ -46,7 +46,7 @@ class LossFunction(nn.Module):
 
         scores = -1 * torch.cat([pos_dist,neg_dist],dim=0).detach().cpu().numpy()
 
-        errors = tuneThresholdfromScore(scores, labelnp, []);
+        errors = tuneThresholdfromScore(scores, labelnp, [])
 
         return nloss, errors[1]
 

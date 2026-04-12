@@ -5,7 +5,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time, pdb, numpy
 from utils import accuracy
 
 class LossFunction(nn.Module):
@@ -21,7 +20,7 @@ class LossFunction(nn.Module):
         self.ce = nn.CrossEntropyLoss()
         nn.init.xavier_normal_(self.W, gain=1)
 
-        print('Initialised AMSoftmax m=%.3f s=%.3f'%(self.m,self.s))
+        print(f'Initialised AMSoftmax m={self.m:.3f} s={self.s:.3f}')
 
     def forward(self, x, label=None):
 
