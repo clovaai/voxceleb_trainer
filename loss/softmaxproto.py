@@ -1,5 +1,3 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 
 import torch
 import torch.nn as nn
@@ -9,7 +7,7 @@ import loss.angleproto as angleproto
 class LossFunction(nn.Module):
 
     def __init__(self, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
 

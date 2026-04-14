@@ -1,16 +1,14 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 
 import torch
 import torchaudio
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
-from models.ResNetBlocks import *
+from models.ResNetBlocks import SEBasicBlock
 
 class ResNetSE(nn.Module):
     def __init__(self, block, layers, num_filters, nOut, encoder_type='SAP', n_mels=40, log_input=True, **kwargs):
-        super(ResNetSE, self).__init__()
+        super().__init__()
 
         print(f'Embedding size is {nOut:d}, encoder {encoder_type}.')
         
@@ -77,7 +75,7 @@ class ResNetSE(nn.Module):
     def forward(self, x):
 
         with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.amp.autocast("cuda", enabled=False):
                 x = self.torchfb(x)+1e-6
                 if self.log_input: x = x.log()
                 x = self.instancenorm(x).unsqueeze(1).detach()

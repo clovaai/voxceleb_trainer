@@ -1,15 +1,19 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
 
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy, sys, random
-import time, itertools, importlib
+import importlib
+import itertools
+import random
+
+logger = logging.getLogger(__name__)
+
+import numpy
 from tqdm import tqdm
 
 from DatasetLoader import test_dataset_loader
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 
 
 class WrappedModel(nn.Module):
@@ -17,7 +21,7 @@ class WrappedModel(nn.Module):
     ## The purpose of this wrapper is to make the model structure consistent between single and multi-GPU
 
     def __init__(self, model):
-        super(WrappedModel, self).__init__()
+        super().__init__()
         self.module = model
 
     def forward(self, x, label=None):
@@ -26,7 +30,7 @@ class WrappedModel(nn.Module):
 
 class SpeakerNet(nn.Module):
     def __init__(self, model, optimizer, trainfunc, nPerSpeaker, **kwargs):
-        super(SpeakerNet, self).__init__()
+        super().__init__()
 
         SpeakerNetModel = importlib.import_module("models." + model).__getattribute__("MainModel")
         self.__S__ = SpeakerNetModel(**kwargs)
@@ -38,7 +42,7 @@ class SpeakerNet(nn.Module):
 
     def forward(self, data, label=None):
 
-        data = data.reshape(-1, data.size()[-1]).cuda()
+        data = data.reshape(-1, data.size()[-1]).to(next(self.parameters()).device)
         outp = self.__S__.forward(data)
 
         if label is None:
@@ -53,7 +57,7 @@ class SpeakerNet(nn.Module):
             return nloss, prec1
 
 
-class ModelTrainer(object):
+class ModelTrainer:
     def __init__(self, speaker_model, optimizer, scheduler, gpu, mixedprec, **kwargs):
 
         self.__model__ = speaker_model
@@ -64,9 +68,10 @@ class ModelTrainer(object):
         Scheduler = importlib.import_module("scheduler." + scheduler).__getattribute__("Scheduler")
         self.__scheduler__, self.lr_step = Scheduler(self.__optimizer__, **kwargs)
 
-        self.scaler = GradScaler()
+        self.scaler = GradScaler("cuda")
 
         self.gpu = gpu
+        self.device = torch.device(f"cuda:{gpu}")
 
         self.mixedprec = mixedprec
 
@@ -92,10 +97,10 @@ class ModelTrainer(object):
 
                 self.__model__.zero_grad()
 
-                label = torch.LongTensor(data_label).cuda()
+                label = torch.LongTensor(data_label).to(self.device)
 
                 if self.mixedprec:
-                    with autocast():
+                    with autocast("cuda"):
                         nloss, prec1 = self.__model__(data, label)
                     self.scaler.scale(nloss).backward()
                     self.scaler.step(self.__optimizer__)
@@ -124,19 +129,20 @@ class ModelTrainer(object):
     ## Evaluate from list
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, distributed, print_interval=100, num_eval=10, **kwargs):
+    def evaluateFromList(self, test_list, test_path, nDataLoaderThread, distributed, num_eval=10, **kwargs):
 
         if distributed:
             rank = torch.distributed.get_rank()
         else:
             rank = 0
 
+        verbose = (rank == 0)
+
         self.__model__.eval()
 
         lines = []
         files = []
         feats = {}
-        tstart = time.time()
 
         ## Read all lines
         with open(test_list) as f:
@@ -158,17 +164,12 @@ class ModelTrainer(object):
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=nDataLoaderThread, drop_last=False, sampler=sampler)
 
         ## Extract features for every image
-        for idx, data in enumerate(test_loader):
-            inp1 = data[0][0].cuda()
-            with torch.no_grad():
-                ref_feat = self.__model__(inp1).detach().cpu()
-            feats[data[1][0]] = ref_feat
-            telapsed = time.time() - tstart
-
-            if idx % print_interval == 0 and rank == 0:
-                sys.stdout.write(
-                    f"\rReading {idx:d} of {test_loader.__len__():d}: {idx / telapsed:.2f} Hz, embedding size {ref_feat.size()[1]:d}"
-                )
+        with tqdm(test_loader, unit="utt", desc="Extracting", disable=not verbose) as tepoch:
+            for data in tepoch:
+                inp1 = data[0][0].to(self.device)
+                with torch.no_grad():
+                    ref_feat = self.__model__(inp1).detach().cpu()
+                feats[data[1][0]] = ref_feat
 
         all_scores = []
         all_labels = []
@@ -181,9 +182,6 @@ class ModelTrainer(object):
 
         if rank == 0:
 
-            tstart = time.time()
-            print("")
-
             ## Combine gathered features
             if distributed:
                 feats = feats_all[0]
@@ -191,33 +189,29 @@ class ModelTrainer(object):
                     feats.update(feats_batch)
 
             ## Read files and compute all scores
-            for idx, line in enumerate(lines):
+            with tqdm(lines, unit="trial", desc="Scoring", disable=not verbose) as tepoch:
+                for line in tepoch:
 
-                data = line.split()
+                    data = line.split()
 
-                ## Append random label if missing
-                if len(data) == 2:
-                    data = [random.randint(0, 1)] + data
+                    ## Append random label if missing
+                    if len(data) == 2:
+                        data = [random.randint(0, 1)] + data
 
-                ref_feat = feats[data[1]].cuda()
-                com_feat = feats[data[2]].cuda()
+                    ref_feat = feats[data[1]].to(self.device)
+                    com_feat = feats[data[2]].to(self.device)
 
-                if self.__model__.module.__L__.test_normalize:
-                    ref_feat = F.normalize(ref_feat, p=2, dim=1)
-                    com_feat = F.normalize(com_feat, p=2, dim=1)
+                    if self.__model__.module.__L__.test_normalize:
+                        ref_feat = F.normalize(ref_feat, p=2, dim=1)
+                        com_feat = F.normalize(com_feat, p=2, dim=1)
 
-                dist = torch.cdist(ref_feat.reshape(num_eval, -1), com_feat.reshape(num_eval, -1)).detach().cpu().numpy()
+                    dist = torch.cdist(ref_feat.reshape(num_eval, -1), com_feat.reshape(num_eval, -1)).detach().cpu().numpy()
 
-                score = -1 * numpy.mean(dist)
+                    score = -1 * numpy.mean(dist)
 
-                all_scores.append(score)
-                all_labels.append(int(data[0]))
-                all_trials.append(data[1] + " " + data[2])
-
-                if idx % print_interval == 0:
-                    telapsed = time.time() - tstart
-                    sys.stdout.write(f"\rComputing {idx:d} of {len(lines):d}: {idx / telapsed:.2f} Hz")
-                    sys.stdout.flush()
+                    all_scores.append(score)
+                    all_labels.append(int(data[0]))
+                    all_trials.append(data[1] + " " + data[2])
 
         return (all_scores, all_labels, all_trials)
 
@@ -225,9 +219,14 @@ class ModelTrainer(object):
     ## Save parameters
     ## ===== ===== ===== ===== ===== ===== ===== =====
 
-    def saveParameters(self, path):
+    def saveParameters(self, path, epoch):
 
-        torch.save(self.__model__.module.state_dict(), path)
+        torch.save({
+            "model_state_dict": self.__model__.module.state_dict(),
+            "optimizer_state_dict": self.__optimizer__.state_dict(),
+            "scheduler_state_dict": self.__scheduler__.state_dict(),
+            "epoch": epoch,
+        }, path)
 
     ## ===== ===== ===== ===== ===== ===== ===== =====
     ## Load parameters
@@ -236,7 +235,19 @@ class ModelTrainer(object):
     def loadParameters(self, path):
 
         self_state = self.__model__.module.state_dict()
-        loaded_state = torch.load(path, map_location=f"cuda:{self.gpu:d}")
+        checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+
+        ## New checkpoint format
+        if "model_state_dict" in checkpoint:
+            loaded_state = checkpoint["model_state_dict"]
+            self.__optimizer__.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.__scheduler__.load_state_dict(checkpoint["scheduler_state_dict"])
+            epoch = checkpoint["epoch"]
+        else:
+            ## Legacy format: bare state_dict or {"model": state_dict}
+            loaded_state = checkpoint
+            epoch = None
+
         if len(loaded_state.keys()) == 1 and "model" in loaded_state:
             loaded_state = loaded_state["model"]
             newdict = {}
@@ -248,17 +259,20 @@ class ModelTrainer(object):
             loaded_state.update(newdict)
             for name in delete_list:
                 del loaded_state[name]
+
         for name, param in loaded_state.items():
             origname = name
             if name not in self_state:
                 name = name.replace("module.", "")
 
                 if name not in self_state:
-                    print(f"{origname} is not in the model.")
+                    logger.warning(f"{origname} is not in the model.")
                     continue
 
             if self_state[name].size() != loaded_state[origname].size():
-                print(f"Wrong parameter length: {origname}, model: {self_state[name].size()}, loaded: {loaded_state[origname].size()}")
+                logger.warning(f"Wrong parameter length: {origname}, model: {self_state[name].size()}, loaded: {loaded_state[origname].size()}")
                 continue
 
             self_state[name].copy_(param)
+
+        return epoch

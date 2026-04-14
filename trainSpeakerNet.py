@@ -1,20 +1,29 @@
-#!/usr/bin/python
-#-*- coding: utf-8 -*-
 
-import sys, os, argparse
-import yaml
-import torch
-import glob
-import zipfile
-import warnings
+import argparse
 import datetime
 import logging
-from tuneThreshold import *
-from SpeakerNet import *
-from DatasetLoader import *
+import os
+import sys
+import warnings
+import zipfile
+from pathlib import Path
+
+import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import yaml
+
+from DatasetLoader import train_dataset_loader, train_dataset_sampler, worker_init_fn
+from SpeakerNet import ModelTrainer, SpeakerNet, WrappedModel
+from tuneThreshold import ComputeErrorRates, ComputeMinDcf, tuneThresholdfromScore
+
 warnings.simplefilter("ignore")
+logging.basicConfig(
+    handlers=[logging.StreamHandler(sys.stdout)],
+    level=logging.INFO,
+    format='[%(levelname)s] :: %(asctime)s :: %(message)s',
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
 ## Parse arguments
@@ -118,15 +127,9 @@ def main_worker(gpu, ngpus_per_node, args):
     logger = logging.getLogger('SpeakerNet')
 
     if args.gpu == 0:
-        logging.basicConfig(
-            handlers=[
-                logging.StreamHandler(sys.stdout),
-                logging.FileHandler(args.result_save_path+"/scores.txt", mode="a+"),
-            ],
-            level=logging.INFO,
-            format='[%(levelname)s] :: %(asctime)s :: %(message)s',
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+        file_handler = logging.FileHandler(Path(args.result_save_path) / "scores.txt", mode="a+")
+        file_handler.setFormatter(logging.Formatter('[%(levelname)s] :: %(asctime)s :: %(message)s', datefmt="%Y-%m-%d %H:%M:%S"))
+        logging.getLogger().addHandler(file_handler)
 
     ## Load models
     s = SpeakerNet(**vars(args))
@@ -169,21 +172,24 @@ def main_worker(gpu, ngpus_per_node, args):
     trainer     = ModelTrainer(s, **vars(args))
 
     ## Load model weights
-    modelfiles = glob.glob(f'{args.model_save_path}/model0*.model')
-    modelfiles.sort()
+    modelfiles = sorted(Path(args.model_save_path).glob('model0*.model'))
 
     if(args.initial_model != ""):
         trainer.loadParameters(args.initial_model)
         if args.gpu == 0:
             logger.info(f"Model {args.initial_model} loaded!")
     elif len(modelfiles) >= 1:
-        trainer.loadParameters(modelfiles[-1])
+        epoch = trainer.loadParameters(str(modelfiles[-1]))
         if args.gpu == 0:
             logger.info(f"Model {modelfiles[-1]} loaded from previous state!")
-        it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
-
-    for ii in range(1,it):
-        trainer.__scheduler__.step()
+        if epoch is not None:
+            ## New checkpoint format: optimizer/scheduler already restored
+            it = epoch + 1
+        else:
+            ## Legacy format: step scheduler manually to restore LR
+            it = int(modelfiles[-1].stem[5:]) + 1
+            for ii in range(1, it):
+                trainer.__scheduler__.step()
 
     ## Evaluation code - must run on single GPU
     if args.eval == True:
@@ -209,15 +215,15 @@ def main_worker(gpu, ngpus_per_node, args):
 
     ## Save training code and params
     if args.gpu == 0:
-        pyfiles = glob.glob('./*.py')
+        pyfiles = list(Path('.').glob('*.py'))
         strtime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
-        zipf = zipfile.ZipFile(f'{args.result_save_path}/run{strtime}.zip', 'w', zipfile.ZIP_DEFLATED)
+        zipf = zipfile.ZipFile(Path(args.result_save_path) / f'run{strtime}.zip', 'w', zipfile.ZIP_DEFLATED)
         for file in pyfiles:
             zipf.write(file)
         zipf.close()
 
-        with open(f'{args.result_save_path}/run{strtime}.cmd', 'w') as f:
+        with open(Path(args.result_save_path) / f'run{strtime}.cmd', 'w') as f:
             f.write(f'{args}')
 
     ## Core training script
@@ -247,9 +253,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
                 logger.info(f"Epoch {it:d}, VEER {result[1]:2.4f}, MinDCF {mindcf:2.5f}")
 
-                trainer.saveParameters(f"{args.model_save_path}/model{it:09d}.model")
+                trainer.saveParameters(str(Path(args.model_save_path) / f"model{it:09d}.model"), epoch=it)
 
-                with open(f"{args.model_save_path}/model{it:09d}.eer", 'w') as eerfile:
+                with open(Path(args.model_save_path) / f"model{it:09d}.eer", 'w') as eerfile:
                     eerfile.write(f'{result[1]:2.4f}')
 
 
@@ -259,22 +265,24 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
 def main():
-    args.model_save_path     = args.save_path+"/model"
-    args.result_save_path    = args.save_path+"/result"
+    logger = logging.getLogger('SpeakerNet')
+
+    args.model_save_path     = str(Path(args.save_path) / "model")
+    args.result_save_path    = str(Path(args.save_path) / "result")
     args.feat_save_path      = ""
 
-    os.makedirs(args.model_save_path, exist_ok=True)
-    os.makedirs(args.result_save_path, exist_ok=True)
+    Path(args.model_save_path).mkdir(parents=True, exist_ok=True)
+    Path(args.result_save_path).mkdir(parents=True, exist_ok=True)
 
     if not args.distributed:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     n_gpus = torch.cuda.device_count()
 
-    print('Python Version:', sys.version)
-    print('PyTorch Version:', torch.__version__)
-    print('Number of GPUs:', torch.cuda.device_count())
-    print('Save path:',args.save_path)
+    logger.info(f'Python Version: {sys.version}')
+    logger.info(f'PyTorch Version: {torch.__version__}')
+    logger.info(f'Number of GPUs: {torch.cuda.device_count()}')
+    logger.info(f'Save path: {args.save_path}')
 
     if args.distributed:
         mp.spawn(main_worker, nprocs=n_gpus, args=(n_gpus, args))

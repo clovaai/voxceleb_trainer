@@ -1,13 +1,10 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 
 import torch
 import numpy
 import random
-import os
 import math
-import glob
 import soundfile
+from pathlib import Path
 from scipy import signal
 from torch.utils.data import Dataset
 import torch.distributed as dist
@@ -46,11 +43,11 @@ def loadWAV(filename, max_frames, evalmode=True, num_eval=10):
         for asf in startframe:
             feats.append(audio[int(asf):int(asf)+max_audio])
 
-    feat = numpy.stack(feats,axis=0).astype(numpy.float)
+    feat = numpy.stack(feats,axis=0).astype(numpy.float64)
 
     return feat
     
-class AugmentWAV(object):
+class AugmentWAV:
 
     def __init__(self, musan_path, rir_path, max_frames):
 
@@ -63,14 +60,15 @@ class AugmentWAV(object):
         self.numnoise   = {'noise':[1,1], 'speech':[3,7],  'music':[1,1] }
         self.noiselist  = {}
 
-        augment_files   = glob.glob(os.path.join(musan_path,'*/*/*/*.wav'))
+        augment_files   = list(Path(musan_path).glob('*/*/*/*.wav'))
 
         for file in augment_files:
-            if not file.split('/')[-4] in self.noiselist:
-                self.noiselist[file.split('/')[-4]] = []
-            self.noiselist[file.split('/')[-4]].append(file)
+            noise_type = file.parts[-4]
+            if noise_type not in self.noiselist:
+                self.noiselist[noise_type] = []
+            self.noiselist[noise_type].append(str(file))
 
-        self.rir_files  = glob.glob(os.path.join(rir_path,'*/*/*.wav'))
+        self.rir_files  = [str(f) for f in Path(rir_path).glob('*/*/*.wav')]
 
     def additive_noise(self, noisecat, audio):
 
@@ -95,7 +93,7 @@ class AugmentWAV(object):
         rir_file    = random.choice(self.rir_files)
         
         rir, fs     = soundfile.read(rir_file)
-        rir         = numpy.expand_dims(rir.astype(numpy.float),0)
+        rir         = numpy.expand_dims(rir.astype(numpy.float64),0)
         rir         = rir / numpy.sqrt(numpy.sum(rir**2))
 
         return signal.convolve(audio, rir, mode='full')[:,:self.max_audio]
@@ -129,7 +127,7 @@ class train_dataset_loader(Dataset):
             data = line.strip().split()
 
             speaker_label = dictkeys[data[0]]
-            filename = os.path.join(train_path,data[1])
+            filename = str(Path(train_path) / data[1])
             
             self.data_label.append(speaker_label)
             self.data_list.append(filename)
@@ -172,7 +170,7 @@ class test_dataset_loader(Dataset):
         self.test_list  = test_list
 
     def __getitem__(self, index):
-        audio = loadWAV(os.path.join(self.test_path,self.test_list[index]), self.max_frames, evalmode=True, num_eval=self.num_eval)
+        audio = loadWAV(str(Path(self.test_path) / self.test_list[index]), self.max_frames, evalmode=True, num_eval=self.num_eval)
         return torch.FloatTensor(audio), self.test_list[index]
 
     def __len__(self):

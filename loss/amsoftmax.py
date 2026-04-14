@@ -1,5 +1,3 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 # Adapted from https://github.com/CoinCheung/pytorch-loss (MIT License)
 
 import torch
@@ -9,7 +7,7 @@ from utils import accuracy
 
 class LossFunction(nn.Module):
     def __init__(self, nOut, nClasses, margin=0.3, scale=15, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
         
@@ -33,9 +31,7 @@ class LossFunction(nn.Module):
         w_norm = torch.div(self.W, w_norm)
         costh = torch.mm(x_norm, w_norm)
         label_view = label.view(-1, 1)
-        if label_view.is_cuda: label_view = label_view.cpu()
-        delt_costh = torch.zeros(costh.size()).scatter_(1, label_view, self.m)
-        if x.is_cuda: delt_costh = delt_costh.cuda()
+        delt_costh = torch.zeros(costh.size(), device=x.device).scatter_(1, label_view, self.m)
         costh_m = costh - delt_costh
         costh_m_s = self.s * costh_m
         loss    = self.ce(costh_m_s, label)

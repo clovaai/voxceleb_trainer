@@ -1,5 +1,3 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 
 import torch
 import torchaudio
@@ -9,7 +7,7 @@ from torch.nn import Parameter
 
 class MainModel(nn.Module):
     def __init__(self, nOut = 1024, encoder_type='SAP', log_input=True, **kwargs):
-        super(MainModel, self).__init__()
+        super().__init__()
 
         print(f'Embedding size is {nOut:d}, encoder {encoder_type}.')
         
@@ -72,7 +70,7 @@ class MainModel(nn.Module):
     def forward(self, x):
 
         with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.amp.autocast("cuda", enabled=False):
                 x = self.torchfb(x)+1e-6
                 if self.log_input: x = x.log()
                 x = self.instancenorm(x).unsqueeze(1)

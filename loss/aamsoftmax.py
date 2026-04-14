@@ -1,5 +1,3 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 # Adapted from https://github.com/wujiyang/Face_Pytorch (Apache License)
 
 import torch
@@ -10,7 +8,7 @@ from utils import accuracy
 
 class LossFunction(nn.Module):
     def __init__(self, nOut, nClasses, margin=0.3, scale=15, easy_margin=False, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
         
