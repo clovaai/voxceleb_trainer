@@ -187,6 +187,7 @@ class train_dataset_sampler(torch.utils.data.Sampler):
         self.epoch              = 0
         self.seed               = seed
         self.distributed        = distributed
+        self.num_samples        = 0
         
     def __iter__(self):
 

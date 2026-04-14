@@ -89,7 +89,9 @@ class ModelTrainer:
         loss = 0
         top1 = 0
 
-        with tqdm(loader, unit="batch", disable=not verbose) as tepoch:
+        it = iter(loader)
+        total = len(loader)
+        with tqdm(it, unit="batch", total=total, disable=not verbose) as tepoch:
 
             for data, data_label in tepoch:
 
