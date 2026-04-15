@@ -7,12 +7,15 @@ This repository contains the framework for training speaker recognition models d
 pip install -r requirements.txt
 ```
 
+Requires Python >= 3.7 and PyTorch >= 2.0.
+
 ### Data preparation
 
 The following script can be used to download and prepare the VoxCeleb dataset for training.
 
 ```
-python ./dataprep.py --save_path data --download --user USERNAME --password PASSWORD 
+python ./dataprep.py --save_path data --download --key ACCESS_KEY
+python ./dataprep.py --save_path data --concatenate
 python ./dataprep.py --save_path data --extract
 python ./dataprep.py --save_path data --convert
 ```
@@ -42,6 +45,7 @@ python ./trainSpeakerNet.py --config ./configs/ResNetSE34L_AP.yaml
 ```
 
 You can pass individual arguments that are defined in trainSpeakerNet.py by `--{ARG_NAME} {VALUE}`.
+Boolean flags (`--eval`, `--distributed`, `--mixedprec`, `--augment`, `--log_input`) do not take a value — just pass the flag to enable.
 Note that the configuration file overrides the arguments passed via command line.
 
 ### Pretrained models
@@ -51,7 +55,7 @@ A pretrained model, described in [1], can be downloaded from [here](http://www.r
 You can check that the following script returns: `EER 2.1792`. You will be given an option to save the scores.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input True --trainfunc angleproto --save_path exps/test --eval_frames 400 --initial_model baseline_lite_ap.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34L --log_input --trainfunc angleproto --save_path exps/test --eval_frames 400 --initial_model baseline_lite_ap.model
 ```
 
 A larger model trained with online data augmentation, described in [2], can be downloaded from [here](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_smproto.model). 
@@ -59,7 +63,7 @@ A larger model trained with online data augmentation, described in [2], can be d
 The following script should return: `EER 1.0180`.
 
 ```
-python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input True --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_smproto.model
+python ./trainSpeakerNet.py --eval --model ResNetSE34V2 --log_input --encoder_type ASP --n_mels 64 --trainfunc softmaxproto --save_path exps/test --eval_frames 400  --initial_model baseline_v2_smproto.model
 ```
 
 Pretrained RawNet3, described in [3], can be downloaded via `git submodule update --init --recursive`.
@@ -92,7 +96,7 @@ VGGVox40 (SAP, TAP, MAX)
 
 ### Data augmentation
 
-`--augment True` enables online data augmentation, described in [2].
+`--augment` enables online data augmentation, described in [2].
 
 ### Adding new models and loss functions
 

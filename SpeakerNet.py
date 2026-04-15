@@ -242,11 +242,15 @@ class ModelTrainer:
         ## New checkpoint format
         if "model_state_dict" in checkpoint:
             loaded_state = checkpoint["model_state_dict"]
-            self.__optimizer__.load_state_dict(checkpoint["optimizer_state_dict"])
-            self.__scheduler__.load_state_dict(checkpoint["scheduler_state_dict"])
+            try:
+                self.__optimizer__.load_state_dict(checkpoint["optimizer_state_dict"])
+                self.__scheduler__.load_state_dict(checkpoint["scheduler_state_dict"])
+            except ValueError:
+                logger.warning("Optimizer/scheduler state not compatible with current model. Skipping restore.")
             epoch = checkpoint["epoch"]
         else:
             ## Legacy format: bare state_dict or {"model": state_dict}
+            logger.warning("Loading from legacy checkpoint (model weights only). Optimizer and scheduler states will not be restored.")
             loaded_state = checkpoint
             epoch = None
 

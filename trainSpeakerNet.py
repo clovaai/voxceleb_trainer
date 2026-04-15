@@ -39,7 +39,7 @@ parser.add_argument('--eval_frames',    type=int,   default=300,    help='Input 
 parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch size, number of speakers per batch')
 parser.add_argument('--max_seg_per_spk', type=int,  default=500,    help='Maximum number of utterances per speaker per epoch')
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads')
-parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
+parser.add_argument('--augment',        dest='augment', action='store_true', help='Augment input')
 parser.add_argument('--seed',           type=int,   default=10,     help='Seed for the random number generator')
 
 ## Training details
@@ -81,7 +81,7 @@ parser.add_argument('--rir_path',       type=str,   default="data/RIRS_NOISES/si
 
 ## Model definition
 parser.add_argument('--n_mels',         type=int,   default=40,     help='Number of mel filterbanks')
-parser.add_argument('--log_input',      type=bool,  default=False,  help='Log input features')
+parser.add_argument('--log_input',      dest='log_input', action='store_true', help='Log input features')
 parser.add_argument('--model',          type=str,   default="",     help='Name of model definition')
 parser.add_argument('--encoder_type',   type=str,   default="SAP",  help='Type of encoder')
 parser.add_argument('--nOut',           type=int,   default=512,    help='Embedding size in the last FC layer')
@@ -111,7 +111,10 @@ if args.config is not None:
     for k, v in yml_config.items():
         if k in args.__dict__:
             typ = find_option_type(k, parser)
-            args.__dict__[k] = typ(v)
+            if typ is not None:
+                args.__dict__[k] = typ(v)
+            else:
+                args.__dict__[k] = v
         else:
             sys.stderr.write(f"Ignored unknown parameter {k} in yaml.\n")
 

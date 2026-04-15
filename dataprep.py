@@ -5,6 +5,7 @@
 
 import argparse
 import os
+import shutil
 import subprocess
 import hashlib
 import glob
@@ -19,13 +20,13 @@ from scipy.io import wavfile
 parser = argparse.ArgumentParser(description = "VoxCeleb downloader")
 
 parser.add_argument('--save_path',     type=str, default="data", help='Target directory')
-parser.add_argument('--user',         type=str, default="user", help='Username')
-parser.add_argument('--password',     type=str, default="pass", help='Password')
+parser.add_argument('--key',          type=str, default="",     help='Access key for VoxCeleb download')
 
-parser.add_argument('--download', dest='download', action='store_true', help='Enable download')
-parser.add_argument('--extract',  dest='extract',  action='store_true', help='Enable extract')
-parser.add_argument('--convert',  dest='convert',  action='store_true', help='Enable convert')
-parser.add_argument('--augment',  dest='augment',  action='store_true', help='Download and extract augmentation files')
+parser.add_argument('--download',    dest='download',    action='store_true', help='Enable download')
+parser.add_argument('--concatenate', dest='concatenate', action='store_true', help='Concatenate downloaded file parts')
+parser.add_argument('--extract',     dest='extract',     action='store_true', help='Extract downloaded files')
+parser.add_argument('--convert',     dest='convert',     action='store_true', help='Enable convert')
+parser.add_argument('--augment',     dest='augment',     action='store_true', help='Download and extract augmentation files')
 
 args = parser.parse_args()
 
@@ -43,24 +44,40 @@ def md5(fname):
 ## ========== ===========
 ## Download with wget
 ## ========== ===========
-def download(args, lines):
+def download(args, lines, use_key=False):
 
     for line in lines:
-        url     = line.split()[0]
-        md5gt     = line.split()[1]
-        outfile = url.split('/')[-1]
+        filename = line.split()[0]
+        md5gt    = line.split()[1]
 
-        ## Download files
-        out     = subprocess.call(f'wget {url} --user {args.user} --password {args.password} -O {args.save_path}/{outfile}', shell=True)
+        if use_key:
+            ## VoxCeleb download with access key
+            url     = f'https://cn01.mmai.io/download/voxceleb?file={filename}&key={args.key}'
+            outfile = filename
+        else:
+            ## Direct URL (e.g. augmentation files)
+            url     = filename
+            outfile = url.split('/')[-1]
+
+        outpath = f'{args.save_path}/{outfile}'
+
+        ## Skip if file already exists with correct checksum
+        if os.path.exists(outpath):
+            if md5(outpath) == md5gt:
+                print(f'Skipping {outfile}, already exists with correct checksum.')
+                continue
+
+        ## Download files (wget -O overwrites existing files)
+        out     = subprocess.call(f'wget --no-check-certificate "{url}" -O {outpath}', shell=True)
         if out != 0:
-            raise ValueError(f'Download failed {url}. If download fails repeatedly, use alternate URL on the VoxCeleb website.')
+            raise ValueError(f'Download failed {outfile}. If download fails repeatedly, use alternate URL on the VoxCeleb website.')
 
-        ## Check MD5
-        md5ck     = md5(f'{args.save_path}/{outfile}')
+        ## Verify checksum
+        md5ck     = md5(outpath)
         if md5ck == md5gt:
             print(f'Checksum successful {outfile}.')
         else:
-            raise Warning(f'Checksum failed {outfile}.')
+            raise ValueError(f'Checksum failed {outfile}.')
 
 ## ========== ===========
 ## Concatenate file parts
@@ -72,17 +89,23 @@ def concatenate(args,lines):
         outfile    = line.split()[1]
         md5gt     = line.split()[2]
 
-        ## Concatenate files
-        out     = subprocess.call(f'cat {args.save_path}/{infile} > {args.save_path}/{outfile}', shell=True)
+        ## Concatenate file parts
+        parts = sorted(glob.glob(f'{args.save_path}/{infile}'))
+        with open(f'{args.save_path}/{outfile}', 'wb') as outf:
+            for part in parts:
+                with open(part, 'rb') as inf:
+                    shutil.copyfileobj(inf, outf)
 
         ## Check MD5
         md5ck     = md5(f'{args.save_path}/{outfile}')
         if md5ck == md5gt:
             print(f'Checksum successful {outfile}.')
         else:
-            raise Warning(f'Checksum failed {outfile}.')
+            raise ValueError(f'Checksum failed {outfile}.')
 
-        out     = subprocess.call(f'rm {args.save_path}/{infile}', shell=True)
+        ## Remove file parts
+        for part in parts:
+            os.remove(part)
 
 ## ========== ===========
 ## Extract zip files
@@ -104,15 +127,19 @@ def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
             raise Exception("Attempted Path Traversal in Tar File")
         tar.extractall(path, members, numeric_owner=numeric_owner)
 
-def full_extract(args, fname):
+def full_extract(args, fname, extract_path=None):
 
-    print(f'Extracting {fname}')
+    if extract_path is None:
+        extract_path = args.save_path
+
+    print(f'Extracting {fname} to {extract_path}')
+    os.makedirs(extract_path, exist_ok=True)
     if fname.endswith(".tar.gz"):
         with tarfile.open(fname, "r:gz") as tar:
-            safe_extract(tar, args.save_path)
+            safe_extract(tar, extract_path)
     elif fname.endswith(".zip"):
         with ZipFile(fname, 'r') as zf:
-            zf.extractall(args.save_path)
+            zf.extractall(extract_path)
 
 
 ## ========== ===========
@@ -133,7 +160,7 @@ def part_extract(args, fname, target):
 ## ========== ===========
 def convert(args):
 
-    files     = glob.glob(f'{args.save_path}/voxceleb2/*/*/*.m4a')
+    files     = glob.glob(f'{args.save_path}/voxceleb2/*/*/*/*.m4a')
     files.sort()
 
     print('Converting files from AAC to WAV')
@@ -183,21 +210,29 @@ if __name__ == "__main__":
     f.close()
 
     if args.augment:
-        download(args,augfiles)
+        download(args, augfiles)
         part_extract(args,os.path.join(args.save_path,'rirs_noises.zip'),['RIRS_NOISES/simulated_rirs/mediumroom','RIRS_NOISES/simulated_rirs/smallroom'])
         full_extract(args,os.path.join(args.save_path,'musan.tar.gz'))
         split_musan(args)
 
     if args.download:
-        download(args,fileparts)
+        download(args, fileparts, use_key=True)
+
+    if args.concatenate:
+        concatenate(args, files)
 
     if args.extract:
-        concatenate(args, files)
-        for file in files:
-            full_extract(args,os.path.join(args.save_path,file.split()[1]))
-        out = subprocess.call(f'mv {args.save_path}/dev/aac/* {args.save_path}/aac/ && rm -r {args.save_path}/dev', shell=True)
-        out = subprocess.call(f'mv {args.save_path}/wav {args.save_path}/voxceleb1', shell=True)
-        out = subprocess.call(f'mv {args.save_path}/aac {args.save_path}/voxceleb2', shell=True)
+        ## Extract VoxCeleb1 dev (from concatenated zip) and test
+        full_extract(args, os.path.join(args.save_path, 'vox1_dev_wav.zip'),
+                     os.path.join(args.save_path, 'voxceleb1', 'dev'))
+        full_extract(args, os.path.join(args.save_path, 'vox1_test_wav.zip'),
+                     os.path.join(args.save_path, 'voxceleb1', 'test'))
+
+        ## Extract VoxCeleb2 dev (from concatenated zip) and test
+        full_extract(args, os.path.join(args.save_path, 'vox2_dev_aac.zip'),
+                     os.path.join(args.save_path, 'voxceleb2', 'dev'))
+        full_extract(args, os.path.join(args.save_path, 'vox2_test_aac.zip'),
+                     os.path.join(args.save_path, 'voxceleb2', 'test'))
 
     if args.convert:
         convert(args)
