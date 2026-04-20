@@ -68,9 +68,7 @@ def download(args, lines, use_key=False):
                 continue
 
         ## Download files (wget -O overwrites existing files)
-        out     = subprocess.call(f'wget --no-check-certificate "{url}" -O {outpath}', shell=True)
-        if out != 0:
-            raise ValueError(f'Download failed {outfile}. If download fails repeatedly, use alternate URL on the VoxCeleb website.')
+        subprocess.run(['wget', '--no-check-certificate', url, '-O', outpath], check=True)
 
         ## Verify checksum
         md5ck     = md5(outpath)
@@ -125,7 +123,7 @@ def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
         member_path = os.path.join(path, member.name)
         if not is_within_directory(path, member_path):
             raise Exception("Attempted Path Traversal in Tar File")
-        tar.extractall(path, members, numeric_owner=numeric_owner)
+    tar.extractall(path, members, numeric_owner=numeric_owner)
 
 def full_extract(args, fname, extract_path=None):
 
@@ -160,15 +158,15 @@ def part_extract(args, fname, target):
 ## ========== ===========
 def convert(args):
 
-    files     = glob.glob(f'{args.save_path}/voxceleb2/*/*/*/*.m4a')
+    files     = glob.glob(f'{args.save_path}/voxceleb2/*/*/*/*/*.m4a')
     files.sort()
 
     print('Converting files from AAC to WAV')
     for fname in tqdm(files):
-        outfile = fname.replace('.m4a','.wav')
-        out = subprocess.call(f'ffmpeg -y -i {fname} -ac 1 -vn -acodec pcm_s16le -ar 16000 {outfile} >/dev/null 2>/dev/null', shell=True)
-        if out != 0:
-            raise ValueError(f'Conversion failed {fname}.')
+        outfile = fname.replace('/aac/', '/wav/').replace('.m4a', '.wav')
+        os.makedirs(os.path.dirname(outfile), exist_ok=True)
+        subprocess.run(['ffmpeg', '-y', '-i', fname, '-ac', '1', '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', outfile],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 ## ========== ===========
 ## Split MUSAN for faster random access
@@ -180,14 +178,13 @@ def split_musan(args):
     audlen = 16000*5
     audstr = 16000*3
 
-    for idx,file in enumerate(files):
+    print('Splitting MUSAN for faster random access')
+    for file in tqdm(files):
         fs,aud = wavfile.read(file)
         writedir = os.path.splitext(file.replace('/musan/','/musan_split/'))[0]
         os.makedirs(writedir)
         for st in range(0,len(aud)-audlen,audstr):
             wavfile.write(f'{writedir}/{st/fs:05.0f}.wav',fs,aud[st:st+audlen])
-
-        print(idx,file)
 
 ## ========== ===========
 ## Main script
@@ -230,7 +227,7 @@ if __name__ == "__main__":
 
         ## Extract VoxCeleb2 dev (from concatenated zip) and test
         full_extract(args, os.path.join(args.save_path, 'vox2_dev_aac.zip'),
-                     os.path.join(args.save_path, 'voxceleb2', 'dev'))
+                     os.path.join(args.save_path, 'voxceleb2'))
         full_extract(args, os.path.join(args.save_path, 'vox2_test_aac.zip'),
                      os.path.join(args.save_path, 'voxceleb2', 'test'))
 

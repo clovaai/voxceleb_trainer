@@ -7,7 +7,7 @@ This repository contains the framework for training speaker recognition models d
 pip install -r requirements.txt
 ```
 
-Requires Python >= 3.7 and PyTorch >= 2.0.
+Requires Python >= 3.8.
 
 ### Data preparation
 
@@ -122,8 +122,10 @@ id00000 id00000/youtube_key/12345.wav
 id00012 id00012/21Uxsk56VDQ/00001.wav
 ```
 
-The train list for VoxCeleb2 can be download from [here](http://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/train_list.txt). The
-test lists for VoxCeleb1 can be downloaded from [here](https://mm.kaist.ac.kr/datasets/voxceleb/index.html#testlist). 
+The train list for VoxCeleb2 can be download from [here](https://mm.kaist.ac.kr/datasets/voxceleb/meta/train_list.txt). The
+test lists for VoxCeleb1 can be downloaded from [here](https://mm.kaist.ac.kr/datasets/voxceleb/index.html#testlist).
+
+**Note:** The VoxCeleb1-E and VoxCeleb1-H test lists contain trials drawn from both the VoxCeleb1 dev set (`voxceleb1/dev/wav`) and test set (`voxceleb1/test/wav`). You will need to merge both into a single directory or adjust the file paths in the trial list accordingly before running evaluation.
 
 ### Replicating the results from the paper
 
