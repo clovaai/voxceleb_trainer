@@ -1,16 +1,14 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 # Adapted from https://github.com/wujiyang/Face_Pytorch (Apache License)
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time, pdb, numpy, math
+import math
 from utils import accuracy
 
 class LossFunction(nn.Module):
     def __init__(self, nOut, nClasses, margin=0.3, scale=15, easy_margin=False, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
         
@@ -29,7 +27,7 @@ class LossFunction(nn.Module):
         self.th = math.cos(math.pi - self.m)
         self.mm = math.sin(math.pi - self.m) * self.m
 
-        print('Initialised AAMSoftmax margin %.3f scale %.3f'%(self.m,self.s))
+        print(f'Initialised AAMSoftmax margin {self.m:.3f} scale {self.s:.3f}')
 
     def forward(self, x, label=None):
 

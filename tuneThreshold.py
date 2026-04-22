@@ -1,13 +1,9 @@
-#!/usr/bin/python
-#-*- coding: utf-8 -*-
 
 import os
 import glob
 import sys
-import time
 from sklearn import metrics
 import numpy
-import pdb
 from operator import itemgetter
 
 def tuneThresholdfromScore(scores, labels, target_fa, target_fr = None):
@@ -15,20 +11,20 @@ def tuneThresholdfromScore(scores, labels, target_fa, target_fr = None):
     fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=1)
     fnr = 1 - tpr
 
-    tunedThreshold = [];
+    tunedThreshold = []
     if target_fr:
         for tfr in target_fr:
             idx = numpy.nanargmin(numpy.absolute((tfr - fnr)))
-            tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]]);
+            tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
     
     for tfa in target_fa:
         idx = numpy.nanargmin(numpy.absolute((tfa - fpr))) # numpy.where(fpr<=tfa)[0][-1]
-        tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]]);
+        tunedThreshold.append([thresholds[idx], fpr[idx], fnr[idx]])
     
     idxE = numpy.nanargmin(numpy.absolute((fnr - fpr)))
     eer  = max(fpr[idxE],fnr[idxE])*100
     
-    return (tunedThreshold, eer, fpr, fnr);
+    return (tunedThreshold, eer, fpr, fnr)
 
 # Creates a list of false-negative rates, a list of false-positive rates
 # and a list of decision thresholds that give those error-rates.

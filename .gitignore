@@ -1,3 +1,7 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+
 # Other files
 *.model
 *.wav

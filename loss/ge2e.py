@@ -1,18 +1,15 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
-## Fast re-implementation of the GE2E loss (https://arxiv.org/abs/1710.10467) 
+## Fast re-implementation of the GE2E loss (https://arxiv.org/abs/1710.10467)
 ## Numerically checked against https://github.com/cvqluu/GE2E-Loss
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time, pdb, numpy
 from utils import accuracy
 
 class LossFunction(nn.Module):
 
     def __init__(self, init_w=10.0, init_b=-5.0, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
         
@@ -46,8 +43,8 @@ class LossFunction(nn.Module):
         torch.clamp(self.w, 1e-6)
         cos_sim_matrix = cos_sim_matrix * self.w + self.b
         
-        label = torch.from_numpy(numpy.asarray(range(0,stepsize))).cuda()
-        nloss = self.criterion(cos_sim_matrix.view(-1,stepsize), torch.repeat_interleave(label,repeats=gsize,dim=0).cuda())
+        label = torch.arange(stepsize, device=x.device)
+        nloss = self.criterion(cos_sim_matrix.view(-1,stepsize), torch.repeat_interleave(label,repeats=gsize,dim=0))
         prec1 = accuracy(cos_sim_matrix.view(-1,stepsize).detach(), torch.repeat_interleave(label,repeats=gsize,dim=0).detach(), topk=(1,))[0]
 
         return nloss, prec1

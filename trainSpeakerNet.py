@@ -1,20 +1,29 @@
-#!/usr/bin/python
-#-*- coding: utf-8 -*-
 
-import sys, time, os, argparse
-import yaml
-import numpy
-import torch
-import glob
-import zipfile
-import warnings
+import argparse
 import datetime
-from tuneThreshold import *
-from SpeakerNet import *
-from DatasetLoader import *
+import logging
+import os
+import sys
+import warnings
+import zipfile
+from pathlib import Path
+
+import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import yaml
+
+from DatasetLoader import train_dataset_loader, train_dataset_sampler, worker_init_fn
+from SpeakerNet import ModelTrainer, SpeakerNet, WrappedModel
+from tuneThreshold import ComputeErrorRates, ComputeMinDcf, tuneThresholdfromScore
+
 warnings.simplefilter("ignore")
+logging.basicConfig(
+    handlers=[logging.StreamHandler(sys.stdout)],
+    level=logging.INFO,
+    format='[%(levelname)s] :: %(asctime)s :: %(message)s',
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
 ## Parse arguments
@@ -30,7 +39,7 @@ parser.add_argument('--eval_frames',    type=int,   default=300,    help='Input 
 parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch size, number of speakers per batch')
 parser.add_argument('--max_seg_per_spk', type=int,  default=500,    help='Maximum number of utterances per speaker per epoch')
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads')
-parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
+parser.add_argument('--augment',        dest='augment', action='store_true', help='Augment input')
 parser.add_argument('--seed',           type=int,   default=10,     help='Seed for the random number generator')
 
 ## Training details
@@ -64,15 +73,15 @@ parser.add_argument('--save_path',      type=str,   default="exps/exp1", help='P
 
 ## Training and test data
 parser.add_argument('--train_list',     type=str,   default="data/train_list.txt",  help='Train list')
-parser.add_argument('--test_list',      type=str,   default="data/test_list.txt",   help='Evaluation list')
-parser.add_argument('--train_path',     type=str,   default="data/voxceleb2", help='Absolute path to the train set')
-parser.add_argument('--test_path',      type=str,   default="data/voxceleb1", help='Absolute path to the test set')
+parser.add_argument('--test_list',      type=str,   default="data/veri_test.txt",   help='Evaluation list')
+parser.add_argument('--train_path',     type=str,   default="data/voxceleb2/dev/wav", help='Absolute path to the train set')
+parser.add_argument('--test_path',      type=str,   default="data/voxceleb1/test/wav", help='Absolute path to the test set')
 parser.add_argument('--musan_path',     type=str,   default="data/musan_split", help='Absolute path to the test set')
 parser.add_argument('--rir_path',       type=str,   default="data/RIRS_NOISES/simulated_rirs", help='Absolute path to the test set')
 
 ## Model definition
 parser.add_argument('--n_mels',         type=int,   default=40,     help='Number of mel filterbanks')
-parser.add_argument('--log_input',      type=bool,  default=False,  help='Log input features')
+parser.add_argument('--log_input',      dest='log_input', action='store_true', help='Log input features')
 parser.add_argument('--model',          type=str,   default="",     help='Name of model definition')
 parser.add_argument('--encoder_type',   type=str,   default="SAP",  help='Type of encoder')
 parser.add_argument('--nOut',           type=int,   default=512,    help='Embedding size in the last FC layer')
@@ -85,6 +94,7 @@ parser.add_argument('--eval',           dest='eval', action='store_true', help='
 parser.add_argument('--port',           type=str,   default="8888", help='Port for distributed training, input as text')
 parser.add_argument('--distributed',    dest='distributed', action='store_true', help='Enable distributed training')
 parser.add_argument('--mixedprec',      dest='mixedprec',   action='store_true', help='Enable mixed precision training')
+parser.add_argument('--gpu_id',         type=int,   default=0,      help='GPU index for single GPU training')
 
 args = parser.parse_args()
 
@@ -101,9 +111,12 @@ if args.config is not None:
     for k, v in yml_config.items():
         if k in args.__dict__:
             typ = find_option_type(k, parser)
-            args.__dict__[k] = typ(v)
+            if typ is not None:
+                args.__dict__[k] = typ(v)
+            else:
+                args.__dict__[k] = v
         else:
-            sys.stderr.write("Ignored unknown parameter {} in yaml.\n".format(k))
+            sys.stderr.write(f"Ignored unknown parameter {k} in yaml.\n")
 
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -113,6 +126,13 @@ if args.config is not None:
 def main_worker(gpu, ngpus_per_node, args):
 
     args.gpu = gpu
+
+    logger = logging.getLogger('SpeakerNet')
+
+    if args.gpu == 0:
+        file_handler = logging.FileHandler(Path(args.result_save_path) / "scores.txt", mode="a+")
+        file_handler.setFormatter(logging.Formatter('[%(levelname)s] :: %(asctime)s :: %(message)s', datefmt="%Y-%m-%d %H:%M:%S"))
+        logging.getLogger().addHandler(file_handler)
 
     ## Load models
     s = SpeakerNet(**vars(args))
@@ -128,17 +148,13 @@ def main_worker(gpu, ngpus_per_node, args):
 
         s = torch.nn.parallel.DistributedDataParallel(s, device_ids=[args.gpu], find_unused_parameters=True)
 
-        print('Loaded the model on GPU {:d}'.format(args.gpu))
+        print(f'Loaded the model on GPU {args.gpu:d}')
 
     else:
         s = WrappedModel(s).cuda(args.gpu)
 
     it = 1
     eers = [100]
-
-    if args.gpu == 0:
-        ## Write args to scorefile
-        scorefile   = open(args.result_save_path+"/scores.txt", "a+")
 
     ## Initialise trainer and data loader
     train_dataset = train_dataset_loader(**vars(args))
@@ -158,28 +174,34 @@ def main_worker(gpu, ngpus_per_node, args):
     trainer     = ModelTrainer(s, **vars(args))
 
     ## Load model weights
-    modelfiles = glob.glob('%s/model0*.model'%args.model_save_path)
-    modelfiles.sort()
+    modelfiles = sorted(Path(args.model_save_path).glob('model0*.model'))
 
     if(args.initial_model != ""):
         trainer.loadParameters(args.initial_model)
-        print("Model {} loaded!".format(args.initial_model))
+        if args.gpu == 0:
+            logger.info(f"Model {args.initial_model} loaded!")
     elif len(modelfiles) >= 1:
-        trainer.loadParameters(modelfiles[-1])
-        print("Model {} loaded from previous state!".format(modelfiles[-1]))
-        it = int(os.path.splitext(os.path.basename(modelfiles[-1]))[0][5:]) + 1
-
-    for ii in range(1,it):
-        trainer.__scheduler__.step()
+        epoch = trainer.loadParameters(str(modelfiles[-1]))
+        if args.gpu == 0:
+            logger.info(f"Model {modelfiles[-1]} loaded from previous state!")
+        if epoch is not None:
+            ## New checkpoint format: optimizer/scheduler already restored
+            it = epoch + 1
+        else:
+            ## Legacy format: step scheduler manually to restore LR
+            it = int(modelfiles[-1].stem[5:]) + 1
+            for ii in range(1, it):
+                trainer.__scheduler__.step()
 
     ## Evaluation code - must run on single GPU
     if args.eval == True:
 
         pytorch_total_params = sum(p.numel() for p in s.module.__S__.parameters())
 
-        print('Total parameters: ',pytorch_total_params)
-        print('Test list',args.test_list)
-        
+        if args.gpu == 0:
+            logger.info(f'Total parameters: {pytorch_total_params:d}')
+            logger.info(f'Test list {args.test_list}')
+
         sc, lab, _ = trainer.evaluateFromList(**vars(args))
 
         if args.gpu == 0:
@@ -189,22 +211,22 @@ def main_worker(gpu, ngpus_per_node, args):
             fnrs, fprs, thresholds = ComputeErrorRates(sc, lab)
             mindcf, threshold = ComputeMinDcf(fnrs, fprs, thresholds, args.dcf_p_target, args.dcf_c_miss, args.dcf_c_fa)
 
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "VEER {:2.4f}".format(result[1]), "MinDCF {:2.5f}".format(mindcf))
+            logger.info(f"VEER {result[1]:2.4f} MinDCF {mindcf:2.5f}")
 
         return
 
     ## Save training code and params
     if args.gpu == 0:
-        pyfiles = glob.glob('./*.py')
+        pyfiles = list(Path('.').glob('*.py'))
         strtime = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
-        zipf = zipfile.ZipFile(args.result_save_path+ '/run%s.zip'%strtime, 'w', zipfile.ZIP_DEFLATED)
+        zipf = zipfile.ZipFile(Path(args.result_save_path) / f'run{strtime}.zip', 'w', zipfile.ZIP_DEFLATED)
         for file in pyfiles:
             zipf.write(file)
         zipf.close()
 
-        with open(args.result_save_path + '/run%s.cmd'%strtime, 'w') as f:
-            f.write('%s'%args)
+        with open(Path(args.result_save_path) / f'run{strtime}.cmd', 'w') as f:
+            f.write(f'{args}')
 
     ## Core training script
     for it in range(it,args.max_epoch+1):
@@ -216,8 +238,7 @@ def main_worker(gpu, ngpus_per_node, args):
         loss, traineer = trainer.train_network(train_loader, verbose=(args.gpu == 0))
 
         if args.gpu == 0:
-            print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f}".format(it, traineer, loss, max(clr)))
-            scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)))
+            logger.info(f"Epoch {it:d}, TEER/TAcc {traineer:2.2f}, TLOSS {loss:f}, LR {max(clr):f}")
 
         if it % args.test_interval == 0:
 
@@ -232,18 +253,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
                 eers.append(result[1])
 
-                print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}".format(it, result[1], mindcf))
-                scorefile.write("Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}\n".format(it, result[1], mindcf))
+                logger.info(f"Epoch {it:d}, VEER {result[1]:2.4f}, MinDCF {mindcf:2.5f}")
 
-                trainer.saveParameters(args.model_save_path+"/model%09d.model"%it)
+                trainer.saveParameters(str(Path(args.model_save_path) / f"model{it:09d}.model"), epoch=it)
 
-                with open(args.model_save_path+"/model%09d.eer"%it, 'w') as eerfile:
-                    eerfile.write('{:2.4f}'.format(result[1]))
-
-                scorefile.flush()
-
-    if args.gpu == 0:
-        scorefile.close()
+                with open(Path(args.model_save_path) / f"model{it:09d}.eer", 'w') as eerfile:
+                    eerfile.write(f'{result[1]:2.4f}')
 
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
@@ -252,19 +267,24 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
 def main():
-    args.model_save_path     = args.save_path+"/model"
-    args.result_save_path    = args.save_path+"/result"
+    logger = logging.getLogger('SpeakerNet')
+
+    args.model_save_path     = str(Path(args.save_path) / "model")
+    args.result_save_path    = str(Path(args.save_path) / "result")
     args.feat_save_path      = ""
 
-    os.makedirs(args.model_save_path, exist_ok=True)
-    os.makedirs(args.result_save_path, exist_ok=True)
+    Path(args.model_save_path).mkdir(parents=True, exist_ok=True)
+    Path(args.result_save_path).mkdir(parents=True, exist_ok=True)
+
+    if not args.distributed:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     n_gpus = torch.cuda.device_count()
 
-    print('Python Version:', sys.version)
-    print('PyTorch Version:', torch.__version__)
-    print('Number of GPUs:', torch.cuda.device_count())
-    print('Save path:',args.save_path)
+    logger.info(f'Python Version: {sys.version}')
+    logger.info(f'PyTorch Version: {torch.__version__}')
+    logger.info(f'Number of GPUs: {torch.cuda.device_count()}')
+    logger.info(f'Save path: {args.save_path}')
 
     if args.distributed:
         mp.spawn(main_worker, nprocs=n_gpus, args=(n_gpus, args))

@@ -1,17 +1,15 @@
-#! /usr/bin/python
-# -*- encoding: utf-8 -*-
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time, pdb, numpy
+import numpy
 from tuneThreshold import tuneThresholdfromScore
 import random
 
 class LossFunction(nn.Module):
 
     def __init__(self, hard_rank=0, hard_prob=0, margin=0, **kwargs):
-        super(LossFunction, self).__init__()
+        super().__init__()
 
         self.test_normalize = True
         
@@ -46,7 +44,7 @@ class LossFunction(nn.Module):
 
         scores = -1 * torch.cat([pos_dist,neg_dist],dim=0).detach().cpu().numpy()
 
-        errors = tuneThresholdfromScore(scores, labelnp, []);
+        errors = tuneThresholdfromScore(scores, labelnp, [])
 
         return nloss, errors[1]
 
